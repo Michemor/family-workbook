@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Family Toolbox Theme Colors - Pink-Purple Palette
-  static const Color primaryColor = Color(0xFF9D4EDD); // Magenta-purple
-  static const Color accentGold = Color(0xFF3A0CA3); // Dark purple
-  static const Color darkBrown = Color(0xFF7209B7); // Purple
-  static const Color lightBeige = Color(0xFFE0AAFF); // Very light pink-purple
-  static const Color softTan = Color(0xFFC77DFF); // Light purple
-  static const Color successGreen = Color(0xFF9D4EDD); // Magenta-purple
-  static const Color errorRed = Color(0xFF9D4EDD); // Magenta-purple
-  static const Color textDark = Color(0xFF3A0CA3); // Dark purple
-  static const Color textLight = Color(0xFFC77DFF); // Light purple
+  // Family Toolbox Theme Colors - Midnight Blue to Light Blue Palette
+  static const Color primaryColor = Color(0xFF0356C5); // Medium royal blue
+  static const Color accentGold = Color(0xFF0206E); // Very dark blue
+  static const Color darkBrown = Color(0xFF0206E); // Very dark blue
+  static const Color lightBeige = Color(0xFFC1E8FF); // Light blue
+  static const Color softTan = Color(0xFF5483B3); // Medium blue
+  static const Color successGreen = Color(0xFF0356C5); // Royal blue
+  static const Color errorRed = Color(0xFF0356C5); // Royal blue
+  static const Color textDark = Color(0xFF0206E); // Very dark blue
+  static const Color textLight = Color(0xFF5483B3); // Medium blue
 
   static ThemeData getTheme() {
     return ThemeData(

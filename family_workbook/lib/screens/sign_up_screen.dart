@@ -101,21 +101,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
         elevation: 0,
         backgroundColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: AppTheme.primaryColor),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFFE0AAFF), // Very light pink-purple
-              const Color(0xFFC77DFF), // Light purple
-              const Color(0xFF9D4EDD), // Magenta-purple
-              const Color(0xFF7209B7), // Purple
-              const Color(0xFF3A0CA3), // Dark purple
+              AppTheme.lightBeige,
+              AppTheme.lightBeige.withOpacity(0.95),
             ],
           ),
         ),

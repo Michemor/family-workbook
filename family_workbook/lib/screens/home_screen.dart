@@ -25,7 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F8FF),
+      backgroundColor: const Color(0xFFC1E8FF), // Light blue background
       body: _selectedIndex == 0 ? _buildHomeTab() : _buildOtherTabs(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
@@ -61,8 +61,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          const Color(0xFF9D4EDD),
-                          const Color(0xFF7209B7),
+                          const Color(0xFF0356C5),
+                          const Color(0xFF5483B3),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(12),
@@ -100,8 +100,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFF9D4EDD),
-                      const Color(0xFF7209B7),
+                      const Color(0xFF0356C5),
+                      const Color(0xFF5483B3),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(20),
@@ -151,10 +151,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
                       child: LinearProgressIndicator(
-                          value: 0.0,
-                          minHeight: 8,
-                          backgroundColor: Colors.white24,
-                          valueColor: const AlwaysStoppedAnimation(Colors.white),
+                        value: 0,
+                        minHeight: 8,
+                        backgroundColor: Colors.white24,
+                        valueColor: AlwaysStoppedAnimation(Colors.white),
                       ),
                     ),
                   ],

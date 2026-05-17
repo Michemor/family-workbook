@@ -27,18 +27,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFFE0AAFF), // Very light pink-purple
-              const Color(0xFFC77DFF), // Light purple
-              const Color(0xFF9D4EDD), // Magenta-purple
-              const Color(0xFF7209B7), // Purple
-              const Color(0xFF3A0CA3), // Dark purple
-            ],
-          ),
+        decoration: const BoxDecoration(
+          color: Color(0xFFC1E8FF), // Light blue
         ),
         child: Center(
           child: Column(
