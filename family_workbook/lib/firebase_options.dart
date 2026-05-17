@@ -64,6 +64,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '1000605619922',
     projectId: 'family-flutter-workbook',
     storageBucket: 'family-flutter-workbook.firebasestorage.app',
+    iosClientId: '1000605619922-3mibvofs66ph2boh5srb4d8fensm8r0o.apps.googleusercontent.com',
     iosBundleId: 'com.example.familyWorkbook',
   );
 
@@ -73,6 +74,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '1000605619922',
     projectId: 'family-flutter-workbook',
     storageBucket: 'family-flutter-workbook.firebasestorage.app',
+    iosClientId: '1000605619922-3mibvofs66ph2boh5srb4d8fensm8r0o.apps.googleusercontent.com',
     iosBundleId: 'com.example.familyWorkbook',
   );
 
@@ -85,4 +87,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'family-flutter-workbook.firebasestorage.app',
     measurementId: 'G-0FRZM1MJFD',
   );
+
 }
