@@ -121,4 +121,10 @@ class AuthService {
   Future<void> signOut() async {
     await _auth.signOut();
   }
+  Future<User?> signInWithGoogle() async {
+    // Implement Google Sign-In logic here
+    // This typically involves using the google_sign_in package to authenticate with Google
+    // and then using the obtained credentials to sign in with Firebase Auth.
+    return null; // Placeholder return
+  }
 }
