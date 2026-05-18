@@ -6,7 +6,7 @@ class TestFamilySetupScreen extends StatefulWidget {
   final User user;
   final Map<String, dynamic> userData;
 
-  const TestFamilySetupScreen({Key? key, required this.user, required this.userData}) : super(key: key);
+  const TestFamilySetupScreen({super.key, required this.user, required this.userData});
 
   @override
   State<TestFamilySetupScreen> createState() => _TestFamilySetupScreenState();

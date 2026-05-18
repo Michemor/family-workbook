@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 class AppTheme {
   // Family Toolbox Theme Colors - Midnight Blue to Light Blue Palette
   static const Color primaryColor = Color(0xFF0356C5); // Medium royal blue
-  static const Color accentGold = Color(0xFF0206E); // Very dark blue
-  static const Color darkBrown = Color(0xFF0206E); // Very dark blue
+  static const Color accentGold = Color(0xFF00206E); // Very dark blue
+  static const Color darkBrown = Color(0xFF00206E); // Very dark blue
   static const Color lightBeige = Color(0xFFC1E8FF); // Light blue
   static const Color softTan = Color(0xFF5483B3); // Medium blue
-  static const Color successGreen = Color(0xFF0356C5); // Royal blue
-  static const Color errorRed = Color(0xFF0356C5); // Royal blue
-  static const Color textDark = Color(0xFF0206E); // Very dark blue
+  static const Color successGreen = Color(0xFF2E7D32); // Deep green
+  static const Color errorRed = Color(0xFFC62828); // Deep red
+  static const Color textDark = Color(0xFF00206E); // Very dark blue
   static const Color textLight = Color(0xFF5483B3); // Medium blue
 
   static ThemeData getTheme() {

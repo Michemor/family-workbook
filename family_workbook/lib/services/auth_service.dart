@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 
 class AuthService {
@@ -39,7 +40,7 @@ class AuthService {
         return newUser;
       }
     } catch (e) {
-      print('Error signing up: $e');
+      debugPrint('Error signing up: $e');
       rethrow; // Rethrow to handle in UI
     }
     return null;
@@ -55,7 +56,7 @@ class AuthService {
         }
       }
     } catch (e) {
-      print('Error signing in: $e');
+      debugPrint('Error signing in: $e');
       rethrow; // Rethrow to handle in UI
     }
     return null;
@@ -65,7 +66,7 @@ class AuthService {
     try {
       await _auth.sendPasswordResetEmail(email: email);
     } catch (e) {
-      print('Error sending password reset email: $e');
+      debugPrint('Error sending password reset email: $e');
       rethrow; // Rethrow to handle in UI
     }
   }
@@ -81,7 +82,7 @@ class AuthService {
       try {
         await _firestore.collection('users').doc(currentUser.uid).update(updates);
       } catch (e) {
-        print('Error updating profile: $e');
+        debugPrint('Error updating profile: $e');
         rethrow; // Rethrow to handle in UI
       }
     }
@@ -96,7 +97,7 @@ class AuthService {
         // Delete user from Firebase Auth
         await currentUser.delete();
       } catch (e) {
-        print('Error deleting account: $e');
+        debugPrint('Error deleting account: $e');
         rethrow; // Rethrow to handle in UI
       }
     }
@@ -111,7 +112,7 @@ class AuthService {
           return UserModel.fromMap(userDoc.data() as Map<String, dynamic>);
         }
       } catch (e) {
-        print('Error fetching current user: $e');
+        debugPrint('Error fetching current user: $e');
         rethrow; // Rethrow to handle in UI
       }
     }

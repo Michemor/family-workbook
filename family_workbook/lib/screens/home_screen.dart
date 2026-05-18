@@ -1,15 +1,26 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/auth_service.dart';
+import '../services/family_service.dart';
+import '../models/user_model.dart';
+import '../models/family_model.dart';
+import 'welcome_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final _authService = AuthService();
+  final _familyService = FamilyService();
+  UserModel? _currentUser;
+  FamilyModel? _currentFamily;
+  bool _isLoadingData = true;
   int _selectedIndex = 0;
+
   final List<String> weekTopics = [
     'Definition of Family',
     'Purpose of Family',
@@ -23,10 +34,51 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final user = await _authService.getCurrentUser();
+      if (user != null) {
+        setState(() {
+          _currentUser = user;
+        });
+        if (user.familyId != null && user.familyId!.isNotEmpty) {
+          final family = await _familyService.getFamilyById(user.familyId!);
+          if (family != null) {
+            setState(() {
+              _currentFamily = family;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading home dashboard data: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingData = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFC1E8FF), // Light blue background
-      body: _selectedIndex == 0 ? _buildHomeTab() : _buildOtherTabs(),
+      body: _isLoadingData
+          ? const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+              ),
+            )
+          : _selectedIndex == 0
+              ? _buildHomeTab()
+              : _buildOtherTabs(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
@@ -45,6 +97,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHomeTab() {
+    final currentWeek = _currentUser?.currentWeek ?? 1;
+    final familyName = _currentFamily?.familyName ?? 'My Family';
+    final progressVal = (_currentFamily?.overallCompletionPercentage ?? 0.0) / 100.0;
+    final readinessVal = (_currentFamily?.charterReadinessScore ?? 0.0) / 100.0;
+
     return SingleChildScrollView(
       child: SafeArea(
         child: Column(
@@ -59,10 +116,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
+                      gradient: const LinearGradient(
                         colors: [
-                          const Color(0xFF0356C5),
-                          const Color(0xFF5483B3),
+                          Color(0xFF0356C5),
+                          Color(0xFF5483B3),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(12),
@@ -70,20 +127,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: const Icon(Icons.home, color: Colors.white),
                   ),
                   const SizedBox(width: 12),
-                  const Column(
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'The Smith Family',
-                        style: TextStyle(
+                        familyName,
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: AppTheme.textDark,
                         ),
                       ),
                       Text(
-                        'Week 1 of 8',
-                        style: TextStyle(
+                        'Week $currentWeek of 8',
+                        style: const TextStyle(
                           fontSize: 12,
                           color: AppTheme.textLight,
                         ),
@@ -98,10 +155,10 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
+                  gradient: const LinearGradient(
                     colors: [
-                      const Color(0xFF0356C5),
-                      const Color(0xFF5483B3),
+                      Color(0xFF0356C5),
+                      Color(0xFF5483B3),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(20),
@@ -138,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         Text(
-                          '0%',
+                          '${(progressVal * 100).toInt()}%',
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -151,10 +208,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
                       child: LinearProgressIndicator(
-                        value: 0,
+                        value: progressVal,
                         minHeight: 8,
                         backgroundColor: Colors.white24,
-                        valueColor: AlwaysStoppedAnimation(Colors.white),
+                        valueColor: const AlwaysStoppedAnimation(Colors.white),
                       ),
                     ),
                   ],
@@ -178,7 +235,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   GestureDetector(
                     onTap: () {},
-                    child: Text(
+                    child: const Text(
                       'View All →',
                       style: TextStyle(
                         fontSize: 14,
@@ -211,24 +268,24 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: Colors.blue.shade100,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Icon(
+                          child: const Icon(
                             Icons.menu_book,
                             color: AppTheme.primaryColor,
                           ),
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Week 1 of 8',
-                                style: TextStyle(
+                                'Week $currentWeek of 8',
+                                style: const TextStyle(
                                   fontSize: 12,
                                   color: AppTheme.textLight,
                                 ),
                               ),
-                              Text(
+                              const Text(
                                 'Family Identity & Structure',
                                 style: TextStyle(
                                   fontSize: 16,
@@ -236,8 +293,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                   color: AppTheme.textDark,
                                 ),
                               ),
-                              SizedBox(height: 4),
-                              Text(
+                              const SizedBox(height: 4),
+                              const Text(
                                 'Define your family identity and establish clear leadership roles',
                                 style: TextStyle(
                                   fontSize: 12,
@@ -299,9 +356,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                        child: const Text(
-                          'Continue Week 1 →',
-                          style: TextStyle(
+                        child: Text(
+                          'Continue Week $currentWeek →',
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
@@ -359,19 +416,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: LinearProgressIndicator(
-                            value: 0.125,
-                            minHeight: 6,
-                            backgroundColor: Colors.grey.shade300,
-                            valueColor: AlwaysStoppedAnimation(
-                              AppTheme.primaryColor,
+                          child: SizedBox(
+                            width: 150,
+                            child: LinearProgressIndicator(
+                              value: currentWeek / 8.0,
+                              minHeight: 6,
+                              backgroundColor: Colors.grey.shade300,
+                              valueColor: const AlwaysStoppedAnimation(
+                                AppTheme.primaryColor,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 12),
-                        const Text(
-                          '1/8',
-                          style: TextStyle(
+                        Text(
+                          '$currentWeek/8',
+                          style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: AppTheme.textDark,
@@ -384,7 +444,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: 4,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      separatorBuilder: (context, index) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final weeks = [
                           'Week 1: Family Identity & Structure',
@@ -392,6 +452,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           'Week 3: Boundaries & Safety',
                           'Week 4: Core Values & Traditions',
                         ];
+                        final isActive = index == (currentWeek - 1);
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4.0),
                           child: Row(
@@ -402,15 +463,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: index == 0
+                                    color: isActive
                                         ? AppTheme.primaryColor
                                         : Colors.grey.shade300,
                                     width: 2,
                                   ),
                                 ),
-                                child: index == 0
+                                child: isActive
                                     ? Container(
-                                        decoration: BoxDecoration(
+                                        decoration: const BoxDecoration(
                                           shape: BoxShape.circle,
                                           color: AppTheme.primaryColor,
                                         ),
@@ -424,10 +485,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                   weeks[index],
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: index == 0
+                                    color: isActive
                                         ? AppTheme.textDark
                                         : AppTheme.textLight,
-                                    fontWeight: index == 0
+                                    fontWeight: isActive
                                         ? FontWeight.w600
                                         : FontWeight.normal,
                                   ),
@@ -451,7 +512,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   gradient: LinearGradient(
                     colors: [
                       const Color(0xFFFF9500),
-                      const Color(0xFFFFA500).withOpacity(0.8),
+                      const Color(0xFFFFA500).withValues(alpha: 0.8),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(16),
@@ -495,7 +556,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 16),
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       padding: const EdgeInsets.all(12),
@@ -522,16 +583,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
                             child: LinearProgressIndicator(
-                              value: 0,
+                              value: readinessVal,
                               minHeight: 6,
                               backgroundColor: Colors.white24,
-                              valueColor: AlwaysStoppedAnimation(Colors.white),
+                              valueColor: const AlwaysStoppedAnimation(Colors.white),
                             ),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
-                            '0/8',
-                            style: TextStyle(
+                          Text(
+                            '${(readinessVal * 8).toInt()}/8',
+                            style: const TextStyle(
                               fontSize: 11,
                               color: Colors.white70,
                             ),
@@ -551,15 +612,128 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildOtherTabs() {
+    if (_selectedIndex == 3) {
+      return _buildProfileTab();
+    }
     return Center(
       child: Text(
         _selectedIndex == 1
             ? 'Modules'
-            : _selectedIndex == 2
-                ? 'Charter'
-                : 'Profile',
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            : 'Charter',
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textDark),
       ),
+    );
+  }
+
+  Widget _buildProfileTab() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(height: 20),
+            // Profile Icon / Image
+            const CircleAvatar(
+              radius: 50,
+              backgroundColor: AppTheme.primaryColor,
+              child: Icon(Icons.person, size: 50, color: Colors.white),
+            ),
+            const SizedBox(height: 20),
+            // Name
+            Text(
+              _currentUser?.username ?? 'Family Member',
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textDark,
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Email
+            Text(
+              _currentUser?.email ?? '',
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppTheme.textLight,
+              ),
+            ),
+            const SizedBox(height: 30),
+            // Detail Cards
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildProfileDetailRow(Icons.family_restroom, 'Family', _currentFamily?.familyName ?? 'No Family connected'),
+                  const Divider(height: 24),
+                  _buildProfileDetailRow(Icons.calendar_today, 'Program Progression', 'Week ${_currentUser?.currentWeek ?? 1} of 8'),
+                  const Divider(height: 24),
+                  _buildProfileDetailRow(Icons.workspace_premium, 'Subscription', _currentUser?.subscriptionStatus?.toUpperCase() ?? 'FREE TRIAL'),
+                ],
+              ),
+            ),
+            const Spacer(),
+            // Sign Out Button
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await _authService.signOut();
+                  if (mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+                      (route) => false,
+                    );
+                  }
+                },
+                icon: const Icon(Icons.logout, color: Colors.white),
+                label: const Text(
+                  'Sign Out',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.errorRed,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileDetailRow(IconData icon, String title, String value) {
+    return Row(
+      children: [
+        Icon(icon, color: AppTheme.primaryColor),
+        const SizedBox(width: 12),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textDark,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            color: AppTheme.textLight,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -3,7 +3,7 @@ import '../theme/app_theme.dart';
 import 'sign_in_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
-  const WelcomeScreen({Key? key}) : super(key: key);
+  const WelcomeScreen({super.key});
 
   @override
   State<WelcomeScreen> createState() => _WelcomeScreenState();
@@ -39,11 +39,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 width: 120,
                 height: 120,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
+                  color: Colors.white.withValues(alpha: 0.95),
                   borderRadius: BorderRadius.circular(30),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 15,
                       offset: const Offset(0, 5),
                     ),
@@ -65,7 +65,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   fontWeight: FontWeight.bold,
                   shadows: [
                     Shadow(
-                      color: Colors.black.withOpacity(0.4),
+                      color: Colors.black.withValues(alpha: 0.4),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),
@@ -78,12 +78,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               Text(
                 'Transform Your Family in 8 Weeks',
                 style: Theme.of(context).textTheme.bodyLarge!.copyWith(
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.withValues(alpha: 0.9),
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
                   shadows: [
                     Shadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: 4,
                       offset: const Offset(0, 1),
                     ),
@@ -94,7 +94,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               const SizedBox(height: 60),
               // Loading Indicator
               CircularProgressIndicator(
-                color: Colors.white.withOpacity(0.8),
+                color: Colors.white.withValues(alpha: 0.8),
                 strokeWidth: 3,
               ),
               const SizedBox(height: 30),
@@ -102,7 +102,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               Text(
                 'Loading...',
                 style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                  color: Colors.white.withOpacity(0.7),
+                  color: Colors.white.withValues(alpha: 0.7),
                   fontSize: 14,
                 ),
               ),

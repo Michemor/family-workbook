@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/family_model.dart';
 import '../models/family_member_model.dart';
 
@@ -49,7 +50,7 @@ class FamilyService {
       await batch.commit();
       return familyRef.id;
   } catch (e) {
-    print('Error creating family: $e');
+    debugPrint('Error creating family: $e');
     rethrow;
   }
 }
@@ -67,7 +68,7 @@ class FamilyService {
         return FamilyModel.fromMap(data);
       }
     } catch (e) {
-      print('Error fetching family: $e');
+      debugPrint('Error fetching family: $e');
     }
     return null;
   }

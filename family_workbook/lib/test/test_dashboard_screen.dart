@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 class TestDashboardScreen extends StatelessWidget {
   final String familyId;
 
-  const TestDashboardScreen({Key? key, required this.familyId}) : super(key: key);
+  const TestDashboardScreen({super.key, required this.familyId});
 
   @override
   Widget build(BuildContext context) {
