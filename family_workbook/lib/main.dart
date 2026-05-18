@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'theme/app_theme.dart';
+import 'screens/welcome_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,13 +21,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Auth Flow Test',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      
-      home: Scaffold(
-        appBar: AppBar(title: const Text('Firebase Auth Emulator Test')),
-        body: const Center(child: Text('Firebase Auth Emulator Connected')),
-      ),
+      debugShowCheckedModeBanner: false,
+      title: 'Family Growth System',
+      theme: AppTheme.getTheme(),
+      home: const WelcomeScreen(),
     );
   }
 }
