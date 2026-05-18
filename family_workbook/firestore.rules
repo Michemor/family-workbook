@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isFamilyMember(familyId) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == familyId;
+    }
+
+    // --- 1. USERS COLLECTION ---
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // --- 2. FAMILIES COLLECTION ---
+    match /families/{familyId} {
+      // Creation: Any authenticated user can create a family (needed for the initial setup batch).
+      allow create: if request.auth != null;
+      
+      // Read/Update: Only users whose 'familyId' matches this document can view or edit it.
+      allow read, update: if request.auth != null && isFamilyMember(familyId);
+      
+      // Prevent accidental deletion of the entire family unit.
+      allow delete: if false; 
+
+      // --- 3. FAMILY MEMBERS SUBCOLLECTION ---
+      // This matches: /families/{familyId}/familyMembers/{memberId}
+      match /familyMembers/{memberId} {
+        // Creation: Allowed for any authenticated user during the setup phase.
+        allow create: if request.auth != null;
+        
+        // Read/Update: Secured by the same helper function. You must belong to the family.
+        allow read, update, delete: if request.auth != null && isFamilyMember(familyId);
+      }
+      
+      // --- 4. FUTURE MODULES & CHARTERS ---
+      // Preparing for Week 3+ of your execution plan.
+      match /modules/{moduleId} {
+        allow read, write: if request.auth != null && isFamilyMember(familyId);
+      }
+      
+      match /charter/{document=**} {
+        allow read, write: if request.auth != null && isFamilyMember(familyId);
+      }
+    }
+
+    // --- DEFAULT DENY ---
+    // If a request doesn't match the specific rules above, block it entirely.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
