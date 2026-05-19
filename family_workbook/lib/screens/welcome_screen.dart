@@ -27,8 +27,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFFC1E8FF), // Light blue
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppTheme.deepNavy,
+              AppTheme.oceanBlue,
+              AppTheme.skyBlue,
+              AppTheme.softLavender,
+              AppTheme.lilacPink,
+            ],
+            stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+          ),
         ),
         child: Center(
           child: Column(

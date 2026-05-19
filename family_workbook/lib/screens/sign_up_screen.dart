@@ -106,15 +106,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
       ),
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppTheme.lightBeige,
-              AppTheme.lightBeige.withOpacity(0.95),
-            ],
-          ),
+        decoration: const BoxDecoration(
+          gradient: AppTheme.primaryOmbre,
         ),
         child: SingleChildScrollView(
           child: Padding(
@@ -130,14 +123,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         width: 70,
                         height: 70,
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              AppTheme.primaryColor,
-                              AppTheme.primaryColor.withOpacity(0.7),
-                            ],
-                          ),
+                          gradient: AppTheme.secondaryOmbre,
                           borderRadius: BorderRadius.circular(18),
                         ),
                         child: const Icon(
@@ -273,7 +259,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: AppTheme.lightBeige,
+                              color: const Color(0xFFEEF2FA),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Column(
@@ -381,7 +367,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           Container(
                             decoration: BoxDecoration(
                               border: Border.all(
-                                color: AppTheme.softTan,
+                                color: AppTheme.softBorder,
                                 width: 1.5,
                               ),
                               borderRadius: BorderRadius.circular(12),

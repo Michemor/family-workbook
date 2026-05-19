@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import 'modules_screen.dart';
+import 'charter_screen.dart';
+import 'payment_screen.dart';
+import 'games_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -25,8 +30,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFC1E8FF), // Light blue background
-      body: _selectedIndex == 0 ? _buildHomeTab() : _buildOtherTabs(),
+      backgroundColor: const Color(0xFFFDFBFB), // Soft modern background
+      body: SafeArea(
+        child: _selectedIndex == 0 
+          ? _buildHomeTab()
+          : _buildOtherTabs(),
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
@@ -34,10 +43,13 @@ class _HomeScreenState extends State<HomeScreen> {
             _selectedIndex = index;
           });
         },
+        type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.book), label: 'Modules'),
           BottomNavigationBarItem(icon: Icon(Icons.bookmark), label: 'Charter'),
+          BottomNavigationBarItem(icon: Icon(Icons.payment), label: 'Payment'),
+          BottomNavigationBarItem(icon: Icon(Icons.sports_esports), label: 'Games'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
@@ -45,12 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHomeTab() {
-    return SingleChildScrollView(
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        // Header
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Row(
@@ -59,36 +69,34 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xFF0356C5),
-                          const Color(0xFF5483B3),
-                        ],
-                      ),
+                      gradient: AppTheme.primaryOmbre,
+                      boxShadow: AppTheme.modernShadow,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(Icons.home, color: Colors.white),
                   ),
                   const SizedBox(width: 12),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'The Smith Family',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textDark,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          'The Smith Family',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textDark,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'Week 1 of 8',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textLight,
+                        Text(
+                          'Week 1 of 8',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textLight,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -98,12 +106,8 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF0356C5),
-                      const Color(0xFF5483B3),
-                    ],
-                  ),
+                  gradient: AppTheme.primaryOmbre,
+                  boxShadow: AppTheme.modernShadow,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 padding: const EdgeInsets.all(20),
@@ -195,7 +199,9 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade200),
+                  color: Colors.white,
+                  boxShadow: AppTheme.modernShadow,
+                  border: Border.all(color: Colors.white),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 padding: const EdgeInsets.all(16),
@@ -208,7 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           width: 50,
                           height: 50,
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade100,
+                            color: const Color(0xFFE0AAFF),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Icon(
@@ -269,7 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
+                            color: const Color(0xFFF3E8FF),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: AppTheme.primaryColor,
@@ -331,7 +337,9 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade200),
+                  color: Colors.white,
+                  boxShadow: AppTheme.modernShadow,
+                  border: Border.all(color: Colors.white),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 padding: const EdgeInsets.all(16),
@@ -357,14 +365,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: LinearProgressIndicator(
-                            value: 0.125,
-                            minHeight: 6,
-                            backgroundColor: Colors.grey.shade300,
-                            valueColor: AlwaysStoppedAnimation(
-                              AppTheme.primaryColor,
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: LinearProgressIndicator(
+                              value: 0.125,
+                              minHeight: 6,
+                              backgroundColor: Colors.grey.shade300,
+                              valueColor: AlwaysStoppedAnimation(
+                                AppTheme.primaryColor,
+                              ),
                             ),
                           ),
                         ),
@@ -443,17 +453,137 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 24),
+            // Payment Module Section
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: AppTheme.secondaryOmbre,
+                  boxShadow: AppTheme.modernShadow,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.payment,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Payment Plans',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              Text(
+                                'Flexible payment options for your program',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {},
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF10B981),
+                        ),
+                        child: const Text('View Plans'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Games Module Section
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: AppTheme.tertiaryOmbre,
+                  boxShadow: AppTheme.modernShadow,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.sports_esports,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Family Games',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              Text(
+                                'Fun activities to strengthen your bonds',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {},
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFFF59E0B),
+                        ),
+                        child: const Text('Play Now'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
             // Charter Readiness
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFFFF9500),
-                      const Color(0xFFFFA500).withOpacity(0.8),
-                    ],
-                  ),
+                  gradient: AppTheme.quaternaryOmbre,
+                  boxShadow: AppTheme.modernShadow,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 padding: const EdgeInsets.all(16),
@@ -544,22 +674,25 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 30),
-          ],
-        ),
-      ),
+      ],
     );
+    
   }
 
   Widget _buildOtherTabs() {
-    return Center(
-      child: Text(
-        _selectedIndex == 1
-            ? 'Modules'
-            : _selectedIndex == 2
-                ? 'Charter'
-                : 'Profile',
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-      ),
-    );
+    switch (_selectedIndex) {
+      case 1:
+        return const ModulesScreen();
+      case 2:
+        return const CharterScreen();
+      case 3:
+        return const PaymentScreen();
+      case 4:
+        return const GamesScreen();
+      case 5:
+        return const ProfileScreen();
+      default:
+        return const Center(child: Text('Unknown Tab'));
+    }
   }
 }

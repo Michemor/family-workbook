@@ -51,10 +51,10 @@ class _SignInScreenState extends State<SignInScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Light Blue Background
+          // Ocean Wave Background
           Container(
             decoration: const BoxDecoration(
-              color: Color(0xFFC1E8FF), // Light blue
+              gradient: AppTheme.primaryOmbre,
             ),
           ),
           // Main Content with Wavy Design
@@ -88,7 +88,7 @@ class _SignInScreenState extends State<SignInScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Welcome Home',
+                            'Transform Your Family',
                             style: Theme.of(context).textTheme.bodyMedium!.copyWith(
                               color: Colors.white.withOpacity(0.95),
                               fontSize: 14,
@@ -148,13 +148,13 @@ class _SignInScreenState extends State<SignInScreen> {
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: const BorderSide(
-                                        color: AppTheme.softTan,
+                                        color: AppTheme.softBorder,
                                       ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: const BorderSide(
-                                        color: AppTheme.softTan,
+                                        color: AppTheme.softBorder,
                                       ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
@@ -209,13 +209,13 @@ class _SignInScreenState extends State<SignInScreen> {
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: const BorderSide(
-                                        color: AppTheme.softTan,
+                                        color: AppTheme.softBorder,
                                       ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: const BorderSide(
-                                        color: AppTheme.softTan,
+                                        color: AppTheme.softBorder,
                                       ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
