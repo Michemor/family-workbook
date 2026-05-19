@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../utils/password_validator.dart';
+import '../services/auth_service.dart';
+import '../services/family_service.dart';
 import 'sign_in_screen.dart';
+import 'home_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
-  const SignUpScreen({Key? key}) : super(key: key);
+  const SignUpScreen({super.key});
 
   @override
   State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
+  final _authService = AuthService();
+  final _familyService = FamilyService();
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -51,7 +56,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
-  void _handleSignUp() {
+  void _handleSignUp() async {
     if (_formKey.currentState!.validate()) {
       if (_selectedFamilyType == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -64,6 +69,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Password does not meet all requirements'),
+            backgroundColor: AppTheme.errorRed,
           ),
         );
         return;
@@ -73,18 +79,64 @@ class _SignUpScreenState extends State<SignUpScreen> {
         _isLoading = true;
       });
 
-      // Simulate quick response
-      Future.delayed(const Duration(milliseconds: 800), () {
+      try {
+        // Step 1: Create user auth account and firestore document
+        final user = await _authService.signUp(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+          username: _nameController.text.trim(),
+        );
+
+        if (user != null) {
+          // Step 2: Create family atomically
+          await _familyService.createFamily(
+            uid: user.uid,
+            username: user.username,
+            familyName: _familyNameController.text.trim(),
+            familyType: _selectedFamilyType!,
+            country: _countryController.text.trim(),
+            role: 'Father', // Default test role
+          );
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Account and Family created successfully!'),
+                backgroundColor: AppTheme.successGreen,
+              ),
+            );
+            // Navigate to home screen
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+              (route) => false,
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Registration failed. Please try again.'),
+                backgroundColor: AppTheme.errorRed,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: ${e.toString()}'),
+              backgroundColor: AppTheme.errorRed,
+            ),
+          );
+        }
+      } finally {
         if (mounted) {
           setState(() {
             _isLoading = false;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Account created successfully!')),
-          );
-          Navigator.of(context).pop();
         }
-      });
+      }
     }
   }
 
@@ -112,7 +164,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             end: Alignment.bottomCenter,
             colors: [
               AppTheme.lightBeige,
-              AppTheme.lightBeige.withOpacity(0.95),
+              AppTheme.lightBeige.withValues(alpha: 0.95),
             ],
           ),
         ),
@@ -135,7 +187,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             end: Alignment.bottomRight,
                             colors: [
                               AppTheme.primaryColor,
-                              AppTheme.primaryColor.withOpacity(0.7),
+                              AppTheme.primaryColor.withValues(alpha: 0.7),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(18),
@@ -173,7 +225,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
+                        color: Colors.black.withValues(alpha: 0.08),
                         blurRadius: 20,
                         offset: const Offset(0, -5),
                       ),
