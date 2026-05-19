@@ -1,1 +1,54 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"family-flutter-workbook","appId":"1:1000605619922:android:3cc147b9221252ab8abf0b","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"family-flutter-workbook","configurations":{"android":"1:1000605619922:android:3cc147b9221252ab8abf0b","ios":"1:1000605619922:ios:c792630695fb73a08abf0b","macos":"1:1000605619922:ios:c792630695fb73a08abf0b","web":"1:1000605619922:web:6af261f474a6bdaf8abf0b","windows":"1:1000605619922:web:9a594e37e7ea68068abf0b"}}}}}}
+<<<<<<< HEAD
+{"flutter":{"platforms":{"android":{"default":{"projectId":"family-flutter-workbook","appId":"1:1000605619922:android:3cc147b9221252ab8abf0b","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"family-flutter-workbook","configurations":{"android":"1:1000605619922:android:3cc147b9221252ab8abf0b","ios":"1:1000605619922:ios:c792630695fb73a08abf0b","macos":"1:1000605619922:ios:c792630695fb73a08abf0b","web":"1:1000605619922:web:6af261f474a6bdaf8abf0b","windows":"1:1000605619922:web:9a594e37e7ea68068abf0b"}}}}},"emulators":{"auth":{"port":9099},"functions":{"port":5001},"firestore":{"port":8080},"ui":{"enabled":true},"singleProjectMode":true}}
+=======
+{
+  "firestore": {
+    "database": "(default)",
+    "location": "africa-south1",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint",
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ],
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "functions": {
+      "port": 5001
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": true
+    },
+    "singleProjectMode": true
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "family_workbook",
+        "supportEmail": "yatoi"
+      }
+    }
+  }
+}
+>>>>>>> main

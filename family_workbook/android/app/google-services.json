@@ -12,7 +12,12 @@
           "package_name": "com.example.family_workbook"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1000605619922-1jvrek60v64hlf5pn4trpp33q34fr0bq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyB6gk8rYIGsQ_KoFwrO4D46nHjavUkXhaA"
@@ -20,7 +25,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1000605619922-1jvrek60v64hlf5pn4trpp33q34fr0bq.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1000605619922-3mibvofs66ph2boh5srb4d8fensm8r0o.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.familyWorkbook"
+              }
+            }
+          ]
         }
       }
     }
