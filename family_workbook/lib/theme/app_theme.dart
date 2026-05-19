@@ -2,22 +2,22 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   // ── Ocean Wave Palette ────────────────────────────────────────────────────
-  static const Color deepNavy    = Color(0xFF142459);
-  static const Color oceanBlue   = Color(0xFF3B67B5);
-  static const Color skyBlue     = Color(0xFF82AADD);
-  static const Color softLavender= Color(0xFFA395D1);
-  static const Color lilacPink   = Color(0xFFCFB8E8);
+  static const Color deepNavy = Color(0xFF142459);
+  static const Color oceanBlue = Color(0xFF3B67B5);
+  static const Color skyBlue = Color(0xFF82AADD);
+  static const Color softLavender = Color(0xFFA395D1);
+  static const Color lilacPink = Color(0xFFCFB8E8);
 
   // ── Semantic aliases (keep old names so screens don't break) ─────────────
   static const Color primaryColor = oceanBlue;
-  static const Color accentGold   = deepNavy;
-  static const Color darkBrown    = deepNavy;
-  static const Color lightBeige   = Color(0xFFEEF4FF); // soft blue-white bg
-  static const Color softTan      = skyBlue;           // border colour
+  static const Color accentGold = deepNavy;
+  static const Color darkBrown = deepNavy;
+  static const Color lightBeige = Color(0xFFEEF4FF); // soft blue-white bg
+  static const Color softTan = skyBlue; // border colour
   static const Color successGreen = Color(0xFF2E7D32);
-  static const Color errorRed     = Color(0xFFC62828);
-  static const Color textDark     = deepNavy;
-  static const Color textLight    = Color(0xFF5483B3);
+  static const Color errorRed = Color(0xFFC62828);
+  static const Color textDark = deepNavy;
+  static const Color textLight = Color(0xFF5483B3);
 
   // ── Gradient shorthands ───────────────────────────────────────────────────
   static const LinearGradient primaryOmbre = LinearGradient(
@@ -39,12 +39,14 @@ class AppTheme {
     colors: [oceanBlue, skyBlue],
   );
 
+  static const LinearGradient wavesOmbre = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [deepNavy, oceanBlue, skyBlue, softLavender, lilacPink],
+  );
+
   static const List<BoxShadow> modernShadow = [
-    BoxShadow(
-      color: Color(0x1A142459),
-      blurRadius: 20,
-      offset: Offset(0, 8),
-    ),
+    BoxShadow(color: Color(0x1A142459), blurRadius: 20, offset: Offset(0, 8)),
   ];
 
   // ── Material ThemeData ────────────────────────────────────────────────────
@@ -74,17 +76,16 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          vertical: 16,
+          horizontal: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: skyBlue, width: 1.5),

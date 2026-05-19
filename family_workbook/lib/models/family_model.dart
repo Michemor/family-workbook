@@ -4,7 +4,8 @@ class FamilyModel {
   final String familyId;
   final String familyName;
   final DateTime createdAt;
-  final double overallCompletionPercentage; // New field to track overall family progress
+  final double
+  overallCompletionPercentage; // New field to track overall family progress
   final double charterReadinessScore;
   final String country;
   final String familyType; // e.g., nuclear, extended, single-parent
@@ -42,14 +43,15 @@ class FamilyModel {
       createdAt: map['createdAt'] is DateTime
           ? map['createdAt'] as DateTime
           : (map['createdAt'] is Timestamp
-              ? (map['createdAt'] as Timestamp).toDate()
-              : DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()),
+                ? (map['createdAt'] as Timestamp).toDate()
+                : DateTime.tryParse(map['createdAt'].toString()) ??
+                      DateTime.now()),
       country: map['country'],
       familyType: map['familyType'],
       // BUG FIX: members may be null if not set in Firestore — default to empty list
       members: map['members'] != null ? List<String>.from(map['members']) : [],
       overallCompletionPercentage: map['overallCompletionPercentage'] ?? 0.0,
-      charterReadinessScore: map['charterReadinessScore'] ?? 0.0
+      charterReadinessScore: map['charterReadinessScore'] ?? 0.0,
     );
   }
 }

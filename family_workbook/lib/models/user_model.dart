@@ -14,7 +14,7 @@ class UserModel {
   final int? completionPercentage;
   final int? currentWeek;
 
-   // New field for tracking profile completion
+  // New field for tracking profile completion
 
   UserModel({
     required this.uid,
@@ -31,25 +31,25 @@ class UserModel {
     this.currentWeek = 1,
   });
 
-// converting to map for database storage
-Map<String, dynamic> toMap() {
-  return {
-    'uid': uid, // BUG FIX: was 'id', must match fromMap key 'uid'
-    'username': username,
-    'email': email,
-    'profilePictureUrl': profilePictureUrl,
-    'createdAt': createdAt?.toIso8601String(),
-    'familyId': familyId,
-    'role': role,
-    'contactNumber': contactNumber,
-    'subscriptionStatus': subscriptionStatus,
-    'isActive': isActive,
-    'completionPercentage': completionPercentage,
-    'currentWeek': currentWeek,
-  };
-}
+  // converting to map for database storage
+  Map<String, dynamic> toMap() {
+    return {
+      'uid': uid, // BUG FIX: was 'id', must match fromMap key 'uid'
+      'username': username,
+      'email': email,
+      'profilePictureUrl': profilePictureUrl,
+      'createdAt': createdAt?.toIso8601String(),
+      'familyId': familyId,
+      'role': role,
+      'contactNumber': contactNumber,
+      'subscriptionStatus': subscriptionStatus,
+      'isActive': isActive,
+      'completionPercentage': completionPercentage,
+      'currentWeek': currentWeek,
+    };
+  }
 
-factory UserModel.fromMap(Map<String, dynamic> map) {
+  factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
       uid: map['uid'], // BUG FIX: was map['id']
       username: map['username'],
@@ -59,9 +59,10 @@ factory UserModel.fromMap(Map<String, dynamic> map) {
       createdAt: map['createdAt'] == null
           ? null
           : (map['createdAt'] is Timestamp
-              ? (map['createdAt'] as Timestamp).toDate()
-              : DateTime.tryParse(map['createdAt'].toString())),
-      familyId: map['familyId'], // BUG FIX: was `map['familyId'] ?? map['familyId']` (no-op)
+                ? (map['createdAt'] as Timestamp).toDate()
+                : DateTime.tryParse(map['createdAt'].toString())),
+      familyId:
+          map['familyId'], // BUG FIX: was `map['familyId'] ?? map['familyId']` (no-op)
       role: map['role'],
       contactNumber: map['contactNumber'],
       subscriptionStatus: map['subscriptionStatus'],
@@ -69,5 +70,5 @@ factory UserModel.fromMap(Map<String, dynamic> map) {
       completionPercentage: map['completionPercentage'],
       currentWeek: map['currentWeek'],
     );
-  } 
+  }
 }

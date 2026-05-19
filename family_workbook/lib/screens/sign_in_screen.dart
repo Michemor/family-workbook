@@ -8,6 +8,8 @@ import 'home_screen.dart';
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
 
+  static String selectedFamilyOption = 'start'; // global access for signup flow
+
   @override
   State<SignInScreen> createState() => _SignInScreenState();
 }
@@ -20,6 +22,7 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _rememberMe = false;
+  String _familyOption = SignInScreen.selectedFamilyOption;
 
   @override
   void dispose() {
@@ -33,13 +36,13 @@ class _SignInScreenState extends State<SignInScreen> {
       setState(() {
         _isLoading = true;
       });
-      
+
       try {
         final user = await _authService.signIn(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
-        
+
         if (mounted) {
           if (user != null) {
             Navigator.of(context).pushReplacement(
@@ -48,7 +51,9 @@ class _SignInScreenState extends State<SignInScreen> {
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Failed to sign in. Please check your credentials.'),
+                content: Text(
+                  'Failed to sign in. Please check your credentials.',
+                ),
                 backgroundColor: AppTheme.errorRed,
               ),
             );
@@ -80,9 +85,7 @@ class _SignInScreenState extends State<SignInScreen> {
         children: [
           // Ocean Wave Background
           Container(
-            decoration: const BoxDecoration(
-              gradient: AppTheme.primaryOmbre,
-            ),
+            decoration: const BoxDecoration(gradient: AppTheme.primaryOmbre),
           ),
           // Main Content with Wavy Design
           SingleChildScrollView(
@@ -100,33 +103,39 @@ class _SignInScreenState extends State<SignInScreen> {
                         children: [
                           Text(
                             'Family Growth',
-                            style: Theme.of(context).textTheme.displayLarge!.copyWith(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black.withValues(alpha: 0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
+                            style: Theme.of(context).textTheme.displayLarge!
+                                .copyWith(
+                                  color: Colors.white,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Welcome Home',
-                            style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                              color: Colors.white.withValues(alpha: 0.95),
-                              fontSize: 14,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black.withValues(alpha: 0.5),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1),
+                            style: Theme.of(context).textTheme.bodyMedium!
+                                .copyWith(
+                                  color: Colors.white.withValues(alpha: 0.95),
+                                  fontSize: 14,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
                           ),
                         ],
                       ),
@@ -137,11 +146,12 @@ class _SignInScreenState extends State<SignInScreen> {
                     child: ClipPath(
                       clipper: WaveClipper(),
                       child: Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                        ),
+                        decoration: const BoxDecoration(color: Colors.white),
                         child: SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24.0,
+                            vertical: 40.0,
+                          ),
                           child: Form(
                             key: _formKey,
                             child: Column(
@@ -149,10 +159,76 @@ class _SignInScreenState extends State<SignInScreen> {
                               children: [
                                 Text(
                                   'Sign In',
-                                  style: Theme.of(context).textTheme.titleLarge!.copyWith(
-                                    fontSize: 24,
+                                  style: Theme.of(context).textTheme.titleLarge!
+                                      .copyWith(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                ),
+                                const SizedBox(height: 20),
+                                // Family Setup Option Dropdown
+                                const Text(
+                                  'FAMILY SETUP OPTION',
+                                  style: TextStyle(
+                                    fontSize: 11,
                                     fontWeight: FontWeight.bold,
                                     color: AppTheme.primaryColor,
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: AppTheme.softTan,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _familyOption,
+                                      isExpanded: true,
+                                      icon: const Icon(
+                                        Icons.keyboard_arrow_down,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: 'start',
+                                          child: Text(
+                                            'Start a New Family Account',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppTheme.primaryColor,
+                                            ),
+                                          ),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'join',
+                                          child: Text(
+                                            'Join an Existing Family Account',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppTheme.primaryColor,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setState(() {
+                                            _familyOption = val;
+                                            SignInScreen.selectedFamilyOption = val;
+                                          });
+                                        }
+                                      },
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 24),
@@ -165,9 +241,13 @@ class _SignInScreenState extends State<SignInScreen> {
                                   ),
                                   decoration: InputDecoration(
                                     labelText: 'Email',
-                                    labelStyle: const TextStyle(color: Colors.black54),
+                                    labelStyle: const TextStyle(
+                                      color: Colors.black54,
+                                    ),
                                     hintText: 'demo@email.com',
-                                    hintStyle: const TextStyle(color: Colors.black38),
+                                    hintStyle: const TextStyle(
+                                      color: Colors.black38,
+                                    ),
                                     prefixIcon: const Icon(
                                       Icons.email_outlined,
                                       color: AppTheme.primaryColor,
@@ -198,8 +278,8 @@ class _SignInScreenState extends State<SignInScreen> {
                                       return 'Please enter your email';
                                     }
                                     if (!RegExp(
-                                            r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
-                                        .hasMatch(value)) {
+                                      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+                                    ).hasMatch(value)) {
                                       return 'Please enter a valid email';
                                     }
                                     return null;
@@ -215,7 +295,9 @@ class _SignInScreenState extends State<SignInScreen> {
                                   ),
                                   decoration: InputDecoration(
                                     labelText: 'Password',
-                                    labelStyle: const TextStyle(color: Colors.black54),
+                                    labelStyle: const TextStyle(
+                                      color: Colors.black54,
+                                    ),
                                     prefixIcon: const Icon(
                                       Icons.lock_outline,
                                       color: AppTheme.primaryColor,
@@ -267,7 +349,8 @@ class _SignInScreenState extends State<SignInScreen> {
                                 const SizedBox(height: 12),
                                 // Remember Me & Forgot Password
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Row(
                                       children: [
@@ -282,7 +365,9 @@ class _SignInScreenState extends State<SignInScreen> {
                                         ),
                                         Text(
                                           'Remember Me',
-                                          style: Theme.of(context).textTheme.bodyMedium,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodyMedium,
                                         ),
                                       ],
                                     ),
@@ -312,7 +397,9 @@ class _SignInScreenState extends State<SignInScreen> {
                                   width: double.infinity,
                                   height: 56,
                                   child: ElevatedButton(
-                                    onPressed: _isLoading ? null : _handleSignIn,
+                                    onPressed: _isLoading
+                                        ? null
+                                        : _handleSignIn,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: AppTheme.primaryColor,
                                       shape: RoundedRectangleBorder(
@@ -321,7 +408,8 @@ class _SignInScreenState extends State<SignInScreen> {
                                     ),
                                     child: _isLoading
                                         ? const Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: [
                                               SizedBox(
                                                 width: 18,
@@ -329,9 +417,9 @@ class _SignInScreenState extends State<SignInScreen> {
                                                 child: CircularProgressIndicator(
                                                   strokeWidth: 2,
                                                   valueColor:
-                                                      AlwaysStoppedAnimation<Color>(
-                                                    Colors.white,
-                                                  ),
+                                                      AlwaysStoppedAnimation<
+                                                        Color
+                                                      >(Colors.white),
                                                 ),
                                               ),
                                               SizedBox(width: 10),
@@ -355,7 +443,9 @@ class _SignInScreenState extends State<SignInScreen> {
                                     children: [
                                       Text(
                                         'Don\'t have an account? ',
-                                        style: Theme.of(context).textTheme.bodyMedium,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodyMedium,
                                       ),
                                       GestureDetector(
                                         onTap: () {
@@ -402,21 +492,29 @@ class WaveClipper extends CustomClipper<Path> {
   Path getClip(Size size) {
     var path = Path();
     path.lineTo(0, 40);
-    
+
     var firstControlPoint = Offset(size.width / 4, 0);
     var firstPoint = Offset(size.width / 2, 40);
-    path.quadraticBezierTo(firstControlPoint.dx, firstControlPoint.dy,
-        firstPoint.dx, firstPoint.dy);
-    
+    path.quadraticBezierTo(
+      firstControlPoint.dx,
+      firstControlPoint.dy,
+      firstPoint.dx,
+      firstPoint.dy,
+    );
+
     var secondControlPoint = Offset(size.width - size.width / 4, 80);
     var secondPoint = Offset(size.width, 40);
-    path.quadraticBezierTo(secondControlPoint.dx, secondControlPoint.dy,
-        secondPoint.dx, secondPoint.dy);
-    
+    path.quadraticBezierTo(
+      secondControlPoint.dx,
+      secondControlPoint.dy,
+      secondPoint.dx,
+      secondPoint.dy,
+    );
+
     path.lineTo(size.width, size.height);
     path.lineTo(0, size.height);
     path.close();
-    
+
     return path;
   }
 
