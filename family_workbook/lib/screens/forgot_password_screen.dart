@@ -60,24 +60,28 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.lightBeige,
-      appBar: AppBar(
-        elevation: 0,
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: AppTheme.primaryOmbre,
+      ),
+      child: Scaffold(
         backgroundColor: Colors.transparent,
-        leading: GestureDetector(
-          onTap: _handleBackToSignIn,
-          child: Padding(
-            padding: const EdgeInsets.only(left: 16.0),
-            child: Icon(
-              Icons.arrow_back,
-              color: AppTheme.primaryColor,
-              size: 24,
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          leading: GestureDetector(
+            onTap: _handleBackToSignIn,
+            child: const Padding(
+              padding: EdgeInsets.only(left: 16.0),
+              child: Icon(
+                Icons.arrow_back,
+                color: Colors.white,
+                size: 24,
+              ),
             ),
           ),
         ),
-      ),
-      body: SafeArea(
+        body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -89,14 +93,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   width: 70,
                   height: 70,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        AppTheme.primaryColor,
-                        AppTheme.primaryColor.withValues(alpha: 0.7),
-                      ],
-                    ),
+                    gradient: AppTheme.primaryOmbre,
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: const Icon(
@@ -277,6 +274,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );

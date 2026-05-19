@@ -78,10 +78,10 @@ class _SignInScreenState extends State<SignInScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Light Blue Background
+          // Ocean Wave Background
           Container(
             decoration: const BoxDecoration(
-              color: Color(0xFFC1E8FF), // Light blue
+              gradient: AppTheme.primaryOmbre,
             ),
           ),
           // Main Content with Wavy Design

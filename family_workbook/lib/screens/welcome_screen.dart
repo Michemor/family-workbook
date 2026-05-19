@@ -28,7 +28,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
-          color: Color(0xFFC1E8FF), // Light blue
+          gradient: AppTheme.primaryOmbre,
         ),
         child: Center(
           child: Column(

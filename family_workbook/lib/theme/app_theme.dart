@@ -1,17 +1,53 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Family Toolbox Theme Colors - Midnight Blue to Light Blue Palette
-  static const Color primaryColor = Color(0xFF0356C5); // Medium royal blue
-  static const Color accentGold = Color(0xFF00206E); // Very dark blue
-  static const Color darkBrown = Color(0xFF00206E); // Very dark blue
-  static const Color lightBeige = Color(0xFFC1E8FF); // Light blue
-  static const Color softTan = Color(0xFF5483B3); // Medium blue
-  static const Color successGreen = Color(0xFF2E7D32); // Deep green
-  static const Color errorRed = Color(0xFFC62828); // Deep red
-  static const Color textDark = Color(0xFF00206E); // Very dark blue
-  static const Color textLight = Color(0xFF5483B3); // Medium blue
+  // ── Ocean Wave Palette ────────────────────────────────────────────────────
+  static const Color deepNavy    = Color(0xFF142459);
+  static const Color oceanBlue   = Color(0xFF3B67B5);
+  static const Color skyBlue     = Color(0xFF82AADD);
+  static const Color softLavender= Color(0xFFA395D1);
+  static const Color lilacPink   = Color(0xFFCFB8E8);
 
+  // ── Semantic aliases (keep old names so screens don't break) ─────────────
+  static const Color primaryColor = oceanBlue;
+  static const Color accentGold   = deepNavy;
+  static const Color darkBrown    = deepNavy;
+  static const Color lightBeige   = Color(0xFFEEF4FF); // soft blue-white bg
+  static const Color softTan      = skyBlue;           // border colour
+  static const Color successGreen = Color(0xFF2E7D32);
+  static const Color errorRed     = Color(0xFFC62828);
+  static const Color textDark     = deepNavy;
+  static const Color textLight    = Color(0xFF5483B3);
+
+  // ── Gradient shorthands ───────────────────────────────────────────────────
+  static const LinearGradient primaryOmbre = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [deepNavy, oceanBlue, skyBlue],
+    stops: [0.0, 0.55, 1.0],
+  );
+
+  static const LinearGradient secondaryOmbre = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [oceanBlue, softLavender],
+  );
+
+  static const LinearGradient cardOmbre = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [oceanBlue, skyBlue],
+  );
+
+  static const List<BoxShadow> modernShadow = [
+    BoxShadow(
+      color: Color(0x1A142459),
+      blurRadius: 20,
+      offset: Offset(0, 8),
+    ),
+  ];
+
+  // ── Material ThemeData ────────────────────────────────────────────────────
   static ThemeData getTheme() {
     return ThemeData(
       useMaterial3: true,
@@ -19,12 +55,12 @@ class AppTheme {
         seedColor: primaryColor,
         brightness: Brightness.light,
       ),
-      scaffoldBackgroundColor: lightBeige,
-      appBarTheme: AppBarTheme(
-        backgroundColor: primaryColor,
+      scaffoldBackgroundColor: const Color(0xFFF8F9FA),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: oceanBlue,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: const TextStyle(
+        titleTextStyle: TextStyle(
           color: Colors.white,
           fontSize: 20,
           fontWeight: FontWeight.w600,
@@ -32,7 +68,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: primaryColor,
+          backgroundColor: oceanBlue,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
           shape: RoundedRectangleBorder(
@@ -47,18 +83,19 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: softTan, width: 1.5),
+          borderSide: const BorderSide(color: skyBlue, width: 1.5),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: softTan, width: 1.5),
+          borderSide: const BorderSide(color: skyBlue, width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: primaryColor, width: 2),
+          borderSide: const BorderSide(color: oceanBlue, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -78,14 +115,8 @@ class AppTheme {
           fontWeight: FontWeight.w600,
           color: textDark,
         ),
-        bodyLarge: TextStyle(
-          fontSize: 16,
-          color: textDark,
-        ),
-        bodyMedium: TextStyle(
-          fontSize: 14,
-          color: textLight,
-        ),
+        bodyLarge: TextStyle(fontSize: 16, color: textDark),
+        bodyMedium: TextStyle(fontSize: 14, color: textLight),
       ),
     );
   }
