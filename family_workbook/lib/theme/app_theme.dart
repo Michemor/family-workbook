@@ -8,6 +8,12 @@ class AppTheme {
   static const Color softLavender = Color(0xFFA395D1);
   static const Color lilacPink = Color(0xFFCFB8E8);
 
+  // ── Mockup / Setup Palette ────────────────────────────────────────────────
+  static const Color warmTan = Color(0xFFC69A75);
+  static const Color tealGreen = Color(0xFF1E5347);
+  static const Color lightWarmBeige = Color(0xFFF5EFEB);
+  static const Color mockupBlack = Color(0xFF1F1F1F);
+
   // ── Semantic aliases (keep old names so screens don't break) ─────────────
   static const Color primaryColor = oceanBlue;
   static const Color accentGold = deepNavy;

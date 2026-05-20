@@ -90,14 +90,23 @@ class AuthService {
     String? username,
     String? phoneNumber,
     String? profilePictureUrl,
+    String? personalityType,
   }) async {
     User? currentUser = _auth.currentUser;
     if (currentUser != null) {
       Map<String, dynamic> updates = {};
-      if (username != null) updates['username'] = username;
-      if (phoneNumber != null) updates['contactNumber'] = phoneNumber;
-      if (profilePictureUrl != null)
+      if (username != null) {
+        updates['username'] = username;
+      }
+      if (phoneNumber != null) {
+        updates['contactNumber'] = phoneNumber;
+      }
+      if (profilePictureUrl != null) {
         updates['profilePictureUrl'] = profilePictureUrl;
+      }
+      if (personalityType != null) {
+        updates['personalityType'] = personalityType;
+      }
 
       try {
         await _firestore

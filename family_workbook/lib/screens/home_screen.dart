@@ -6,7 +6,6 @@ import '../services/family_service.dart';
 import '../models/user_model.dart';
 import '../models/family_model.dart';
 import 'welcome_screen.dart';
-import 'sign_in_screen.dart';
 import 'family_setup_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -267,26 +266,23 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _currentUser = user;
         });
-        if (SignInScreen.selectedFamilyOption == 'join') {
-          SignInScreen.selectedFamilyOption = 'start'; // reset one-time flag
+        if (user.familyId == null || user.familyId!.isEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            Navigator.of(context).push(
+            Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 builder: (context) => FamilySetupScreen(
-                  isJoining: true,
+                  isJoining: false,
                   user: user,
                 ),
               ),
             );
           });
         } else {
-          if (user.familyId != null && user.familyId!.isNotEmpty) {
-            final family = await _familyService.getFamilyById(user.familyId!);
-            if (family != null) {
-              setState(() {
-                _currentFamily = family;
-              });
-            }
+          final family = await _familyService.getFamilyById(user.familyId!);
+          if (family != null) {
+            setState(() {
+              _currentFamily = family;
+            });
           }
         }
       }
@@ -541,7 +537,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Welcome, ${familyName}!',
+                        'Welcome, $familyName!',
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -2264,19 +2260,61 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const SizedBox(height: 20),
-            CircleAvatar(
-              radius: 50,
-              backgroundColor: AppTheme.primaryColor,
-              backgroundImage:
-                  _currentUser?.profilePictureUrl != null &&
-                      _currentUser!.profilePictureUrl!.isNotEmpty
-                  ? NetworkImage(_currentUser!.profilePictureUrl!)
-                  : null,
-              child:
-                  _currentUser?.profilePictureUrl == null ||
-                      _currentUser!.profilePictureUrl!.isEmpty
-                  ? const Icon(Icons.person, size: 50, color: Colors.white)
-                  : null,
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.oceanBlue, width: 3),
+                boxShadow: AppTheme.modernShadow,
+                color: AppTheme.lightBeige,
+              ),
+              child: ClipOval(
+                child: _currentUser?.profilePictureUrl != null &&
+                        _currentUser!.profilePictureUrl!.isNotEmpty
+                    ? (_currentUser!.profilePictureUrl!.startsWith('waves_avatar_')
+                        ? Container(
+                            decoration: BoxDecoration(
+                              image: DecorationImage(
+                                image: const AssetImage('assets/images/waves_bg.png'),
+                                fit: BoxFit.cover,
+                                alignment: _currentUser!.profilePictureUrl == 'waves_avatar_0'
+                                    ? Alignment.topLeft
+                                    : _currentUser!.profilePictureUrl == 'waves_avatar_1'
+                                        ? Alignment.topRight
+                                        : _currentUser!.profilePictureUrl == 'waves_avatar_2'
+                                            ? Alignment.bottomLeft
+                                            : Alignment.bottomRight,
+                              ),
+                            ),
+                            child: Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  _currentUser!.profilePictureUrl == 'waves_avatar_0'
+                                      ? Icons.face_rounded
+                                      : _currentUser!.profilePictureUrl == 'waves_avatar_1'
+                                          ? Icons.face_3_rounded
+                                          : _currentUser!.profilePictureUrl == 'waves_avatar_2'
+                                              ? Icons.face_6_rounded
+                                              : Icons.family_restroom_rounded,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
+                              ),
+                            ),
+                          )
+                        : Image.network(
+                            _currentUser!.profilePictureUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.person, size: 50, color: AppTheme.deepNavy),
+                          ))
+                    : const Icon(Icons.person, size: 50, color: AppTheme.deepNavy),
+              ),
             ),
             const SizedBox(height: 20),
             Text(

@@ -8,8 +8,6 @@ import 'home_screen.dart';
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
 
-  static String selectedFamilyOption = 'start'; // global access for signup flow
-
   @override
   State<SignInScreen> createState() => _SignInScreenState();
 }
@@ -22,7 +20,6 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _rememberMe = false;
-  String _familyOption = SignInScreen.selectedFamilyOption;
 
   @override
   void dispose() {
@@ -167,71 +164,6 @@ class _SignInScreenState extends State<SignInScreen> {
                                       ),
                                 ),
                                 const SizedBox(height: 20),
-                                // Family Setup Option Dropdown
-                                const Text(
-                                  'FAMILY SETUP OPTION',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.primaryColor,
-                                    letterSpacing: 1.1,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: AppTheme.softTan,
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      value: _familyOption,
-                                      isExpanded: true,
-                                      icon: const Icon(
-                                        Icons.keyboard_arrow_down,
-                                        color: AppTheme.primaryColor,
-                                      ),
-                                      items: const [
-                                        DropdownMenuItem(
-                                          value: 'start',
-                                          child: Text(
-                                            'Start a New Family Account',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppTheme.primaryColor,
-                                            ),
-                                          ),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'join',
-                                          child: Text(
-                                            'Join an Existing Family Account',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppTheme.primaryColor,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                      onChanged: (val) {
-                                        if (val != null) {
-                                          setState(() {
-                                            _familyOption = val;
-                                            SignInScreen.selectedFamilyOption = val;
-                                          });
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
                                 // Email Field
                                 TextFormField(
                                   controller: _emailController,
@@ -393,17 +325,27 @@ class _SignInScreenState extends State<SignInScreen> {
                                 ),
                                 const SizedBox(height: 24),
                                 // Login Button
-                                SizedBox(
+                                Container(
                                   width: double.infinity,
                                   height: 56,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [AppTheme.deepNavy, AppTheme.oceanBlue],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(28),
+                                    boxShadow: AppTheme.modernShadow,
+                                  ),
                                   child: ElevatedButton(
                                     onPressed: _isLoading
                                         ? null
                                         : _handleSignIn,
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppTheme.primaryColor,
+                                      backgroundColor: Colors.transparent,
+                                      shadowColor: Colors.transparent,
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(28),
                                       ),
                                     ),
                                     child: _isLoading
@@ -423,14 +365,21 @@ class _SignInScreenState extends State<SignInScreen> {
                                                 ),
                                               ),
                                               SizedBox(width: 10),
-                                              Text('Signing In...'),
+                                              Text(
+                                                'Signing In...',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
                                             ],
                                           )
                                         : const Text(
                                             'Login',
                                             style: TextStyle(
                                               fontSize: 16,
-                                              fontWeight: FontWeight.w600,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
                                             ),
                                           ),
                                   ),

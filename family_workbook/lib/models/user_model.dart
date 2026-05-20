@@ -13,6 +13,7 @@ class UserModel {
   final bool? isActive;
   final int? completionPercentage;
   final int? currentWeek;
+  final String? personalityType;
 
   // New field for tracking profile completion
 
@@ -29,6 +30,7 @@ class UserModel {
     this.isActive = true,
     this.completionPercentage = 0,
     this.currentWeek = 1,
+    this.personalityType,
   });
 
   // converting to map for database storage
@@ -46,6 +48,7 @@ class UserModel {
       'isActive': isActive,
       'completionPercentage': completionPercentage,
       'currentWeek': currentWeek,
+      'personalityType': personalityType,
     };
   }
 
@@ -69,6 +72,7 @@ class UserModel {
       isActive: map['isActive'],
       completionPercentage: map['completionPercentage'],
       currentWeek: map['currentWeek'],
+      personalityType: map['personalityType'],
     );
   }
 }
