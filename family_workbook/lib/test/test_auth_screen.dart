@@ -49,9 +49,15 @@ class _TestAuthScreenState extends State<TestAuthScreen> {
           children: [
             Text(_status, style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 20),
-            ElevatedButton(onPressed: _signUp, child: const Text("TEST SIGN UP")),
+            ElevatedButton(
+              onPressed: _signUp,
+              child: const Text("TEST SIGN UP"),
+            ),
             const SizedBox(height: 10),
-            ElevatedButton(onPressed: _signIn, child: const Text("TEST SIGN IN")),
+            ElevatedButton(
+              onPressed: _signIn,
+              child: const Text("TEST SIGN IN"),
+            ),
           ],
         ),
       ),

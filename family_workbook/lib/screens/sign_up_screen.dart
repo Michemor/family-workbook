@@ -153,20 +153,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
         elevation: 0,
         backgroundColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppTheme.primaryColor),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppTheme.lightBeige,
-              AppTheme.lightBeige.withValues(alpha: 0.95),
-            ],
-          ),
+        decoration: const BoxDecoration(
+          gradient: AppTheme.primaryOmbre,
         ),
         child: SingleChildScrollView(
           child: Padding(

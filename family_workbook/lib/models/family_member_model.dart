@@ -19,7 +19,8 @@ class FamilyMemberModel {
       uid: map['uid'] ?? '',
       name: map['name'] ?? '',
       role: map['role'] ?? '',
-      isSystemAdmin: map['isSystemAdmin'] ?? false, // BUG FIX: was ?? '' (empty string)
+      isSystemAdmin:
+          map['isSystemAdmin'] ?? false, // BUG FIX: was ?? '' (empty string)
     );
   }
 

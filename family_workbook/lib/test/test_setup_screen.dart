@@ -20,7 +20,7 @@ class _TestSetupScreenState extends State<TestSetupScreen> {
   final _familyNameController = TextEditingController(text: "The Martins");
   final _familyTypeController = TextEditingController(text: "Nuclear");
   final _countryController = TextEditingController(text: "Kenya");
-  
+
   bool _isLoading = false;
   String _statusMessage = "Ready to test.";
 
@@ -68,20 +68,43 @@ class _TestSetupScreenState extends State<TestSetupScreen> {
         padding: const EdgeInsets.all(16.0),
         child: ListView(
           children: [
-            TextField(controller: _emailController, decoration: const InputDecoration(labelText: "Email")),
-            TextField(controller: _passwordController, decoration: const InputDecoration(labelText: "Password")),
-            TextField(controller: _nameController, decoration: const InputDecoration(labelText: "Your Name")),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(labelText: "Email"),
+            ),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(labelText: "Password"),
+            ),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: "Your Name"),
+            ),
             const Divider(height: 40),
-            TextField(controller: _familyNameController, decoration: const InputDecoration(labelText: "Family Name")),
-            TextField(controller: _familyTypeController, decoration: const InputDecoration(labelText: "Family Type")),
-            TextField(controller: _countryController, decoration: const InputDecoration(labelText: "Country")),
+            TextField(
+              controller: _familyNameController,
+              decoration: const InputDecoration(labelText: "Family Name"),
+            ),
+            TextField(
+              controller: _familyTypeController,
+              decoration: const InputDecoration(labelText: "Family Type"),
+            ),
+            TextField(
+              controller: _countryController,
+              decoration: const InputDecoration(labelText: "Country"),
+            ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _isLoading ? null : _runTest,
-              child: _isLoading ? const CircularProgressIndicator() : const Text("Run Setup Flow"),
+              child: _isLoading
+                  ? const CircularProgressIndicator()
+                  : const Text("Run Setup Flow"),
             ),
             const SizedBox(height: 20),
-            Text(_statusMessage, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(
+              _statusMessage,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
           ],
         ),
       ),

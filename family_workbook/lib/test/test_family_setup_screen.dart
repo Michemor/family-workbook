@@ -6,7 +6,11 @@ class TestFamilySetupScreen extends StatefulWidget {
   final User user;
   final Map<String, dynamic> userData;
 
-  const TestFamilySetupScreen({super.key, required this.user, required this.userData});
+  const TestFamilySetupScreen({
+    super.key,
+    required this.user,
+    required this.userData,
+  });
 
   @override
   State<TestFamilySetupScreen> createState() => _TestFamilySetupScreenState();
@@ -46,7 +50,10 @@ class _TestFamilySetupScreenState extends State<TestFamilySetupScreen> {
             const SizedBox(height: 20),
             Text(_status, style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
-            ElevatedButton(onPressed: _create, child: const Text("TEST CREATE FAMILY")),
+            ElevatedButton(
+              onPressed: _create,
+              child: const Text("TEST CREATE FAMILY"),
+            ),
           ],
         ),
       ),
