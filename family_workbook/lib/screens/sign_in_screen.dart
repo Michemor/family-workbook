@@ -375,8 +375,9 @@ class _SignInScreenState extends State<SignInScreen> {
                                       onPressed: () {
                                         Navigator.of(context).push(
                                           MaterialPageRoute(
-                                            builder: (context) =>
-                                                const ForgotPasswordScreen(),
+                                            builder: (context) => ForgotPasswordScreen(
+                                              initialEmail: _emailController.text.trim(),
+                                            ),
                                           ),
                                         );
                                       },

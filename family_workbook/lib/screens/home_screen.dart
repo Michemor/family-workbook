@@ -1,10 +1,22 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/family_service.dart';
+import '../services/game_service.dart';
+import '../services/module_service.dart';
+import '../services/charter_service.dart';
+import '../services/response_service.dart';
 import '../models/user_model.dart';
 import '../models/family_model.dart';
+import '../models/game_model.dart';
+import '../models/module_model.dart';
+import '../models/insight_card_model.dart';
+import '../models/module_content_model.dart';
+import '../models/family_charter_model.dart';
+import '../models/user_response_model.dart';
+import '../utils/icon_mapper.dart';
 import 'welcome_screen.dart';
 import 'sign_in_screen.dart';
 import 'family_setup_screen.dart';
@@ -19,6 +31,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _authService = AuthService();
   final _familyService = FamilyService();
+  final _gameService = GameService();
+  final _moduleService = ModuleService();
+  final _charterService = CharterService();
+  final _responseService = ResponseService();
   UserModel? _currentUser;
   FamilyModel? _currentFamily;
   bool _isLoadingData = true;
@@ -58,6 +74,45 @@ class _HomeScreenState extends State<HomeScreen> {
   // Conversation Starter state
   int _convoIndex = 0;
 
+  // ── Game backend streams ───────────────────────────────────────────────────
+  /// Live game catalogue fetched from Firestore `Games` collection.
+  List<GameModel> _gameCatalogue = [];
+  bool _gamesLoading = true;
+
+  /// Live game content — populated from Firestore, with offline fallback.
+  List<Map<String, dynamic>> _triviaQuestions = [];
+  List<String> _convoCards = [];
+  List<String> _matchingValuePool = [];
+
+  // ── Module backend streams ─────────────────────────────────────────────────
+  List<ModuleModel> _modules = [];
+  bool _modulesLoading = true;
+
+  // Active lesson — populated when the user navigates into a lesson subpage.
+  List<InsightCardModel> _activeInsightCards = [];
+  List<ModuleContentModel> _activeModuleContent = [];
+  /// Responses keyed by contentId for O(1) lookup in the lesson view.
+  Map<String, UserResponseModel> _activeResponses = {};
+  bool _lessonContentLoading = false;
+
+  // ── Charter backend streams ────────────────────────────────────────────────
+  FamilyCharterModel? _familyCharter;
+  List<CharterClause> _charterClauses = [];
+  bool _charterLoading = true;
+
+  // Stream subscriptions (cancelled in dispose)
+  StreamSubscription<List<GameModel>>? _catalogueSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _triviaSub;
+  StreamSubscription<List<String>>? _convoSub;
+  StreamSubscription<List<String>>? _matchingSub;
+  StreamSubscription<List<ModuleModel>>? _modulesSub;
+  StreamSubscription<FamilyCharterModel?>? _charterSub;
+  StreamSubscription<List<CharterClause>>? _clausesSub;
+  // Lesson-scoped subscriptions — cancelled on exit
+  StreamSubscription<List<InsightCardModel>>? _insightCardsSub;
+  StreamSubscription<List<ModuleContentModel>>? _moduleContentSub;
+  StreamSubscription<Map<String, UserResponseModel>>? _responsesSub;
+
   final List<String> weekTopics = [
     'Definition of Family',
     'Purpose of Family',
@@ -70,79 +125,9 @@ class _HomeScreenState extends State<HomeScreen> {
     'Household Governance Concepts',
   ];
 
-  final List<Map<String, dynamic>> _triviaQuestions = [
-    {
-      'question': 'Which of these is a core key to building family trust?',
-      'options': [
-        'Active listening & honesty',
-        'Buying expensive gifts',
-        'Avoiding conversation',
-        'Ignoring household rules',
-      ],
-      'answerIndex': 0,
-    },
-    {
-      'question': 'What is the primary purpose of a Family Charter?',
-      'options': [
-        'To track daily chores only',
-        'To define shared values and structure',
-        'To assign homework punishments',
-        'To list family recipes',
-      ],
-      'answerIndex': 1,
-    },
-    {
-      'question':
-          'How should conflicts be addressed in a healthy family structure?',
-      'options': [
-        'Silent treatment',
-        'Shouting at each other',
-        'Respectful dialogue and seeking common ground',
-        'Pretending nothing happened',
-      ],
-      'answerIndex': 2,
-    },
-    {
-      'question': 'Which of the following is NOT one of the 8 weekly modules?',
-      'options': [
-        'Boundaries & Safety',
-        'Roles of Children',
-        'Family Identity & Structure',
-        'Advanced Cooking Skills',
-      ],
-      'answerIndex': 3,
-    },
-    {
-      'question': 'How often should a family hold family governance meetings?',
-      'options': [
-        'Once a year',
-        'Regularly (e.g. weekly or monthly)',
-        'Only during crises',
-        'Never',
-      ],
-      'answerIndex': 1,
-    },
-  ];
-
-  final List<String> _convoCards = [
-    "What is your absolute favorite memory of our family doing something together?",
-    "If our family had a theme song or motto, what would you want it to be?",
-    "What is one thing you appreciate most about the person sitting next to you?",
-    "If you could travel anywhere in the world with the family tomorrow, where would you go?",
-    "What is a family tradition you want to make sure we keep doing forever?",
-    "What is one value you think is most important for our household?",
-    "If you could trade places with any other family member for one day, who would it be and why?",
-    "What was the most challenging part of your week, and how did you overcome it?",
-  ];
-
-  final List<String> _matchingValuePool = [
-    'Love 💖',
-    'Trust 🤝',
-    'Safety 🛡️',
-    'Respect 🙌',
-    'Fun 🎉',
-    'Unity 🧩',
-  ];
+  // Hardcoded lists removed — game content now streams from Firestore via
+  // GameService. Fallback data lives in GameService._fallback* constants.
+  // _triviaQuestions, _convoCards, _matchingValuePool are declared above.
 
   final Map<int, Map<String, dynamic>> lessonData = {
     1: {
@@ -223,6 +208,9 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadData();
+    _startGameStreams();
+    _startModuleStreams();
+    _startCharterStreams();
 
     // Card input listeners to dynamically draw on the preview card
     _cardNumberController.addListener(() {
@@ -252,12 +240,96 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    // Cancel all stream subscriptions
+    _catalogueSub?.cancel();
+    _triviaSub?.cancel();
+    _convoSub?.cancel();
+    _matchingSub?.cancel();
+    _modulesSub?.cancel();
+    _charterSub?.cancel();
+    _clausesSub?.cancel();
+    _insightCardsSub?.cancel();
+    _moduleContentSub?.cancel();
+    _responsesSub?.cancel();
     _cardNumberController.dispose();
     _expiryController.dispose();
     _cvvController.dispose();
     _lessonInput1Controller.dispose();
     _lessonInput2Controller.dispose();
     super.dispose();
+  }
+
+  /// Subscribes to the Firestore game catalogue stream.
+  /// Content streams (trivia/conversations/matching) are started lazily when
+  /// the user selects a specific game, so we can pass the correct [gameId].
+  void _startGameStreams() {
+    _catalogueSub = _gameService.watchGameCatalogue().listen((games) {
+      if (mounted) {
+        setState(() {
+          _gameCatalogue = games;
+          _gamesLoading = false;
+        });
+      }
+    });
+  }
+
+  /// Starts content streams for a specific game by its Firestore [gameId].
+  void _startGameContentStreams(String gameId, String gameType) {
+    _triviaSub?.cancel();
+    _convoSub?.cancel();
+    _matchingSub?.cancel();
+
+    switch (gameType) {
+      case 'trivia':
+        _triviaSub = _gameService.watchTriviaQuestions(gameId).listen((q) {
+          if (mounted) setState(() => _triviaQuestions = q);
+        });
+        break;
+      case 'conversations':
+        _convoSub = _gameService.watchConversationCards(gameId).listen((c) {
+          if (mounted) setState(() => _convoCards = c);
+        });
+        break;
+      case 'matching':
+        _matchingSub = _gameService.watchMatchingValues(gameId).listen((v) {
+          if (mounted) setState(() => _matchingValuePool = v);
+        });
+        break;
+    }
+  }
+
+  /// Subscribes to live modules from Firestore.
+  void _startModuleStreams() {
+    _modulesSub = _moduleService.watchModules().listen((modules) {
+      if (mounted) {
+        setState(() {
+          _modules = modules;
+          _modulesLoading = false;
+        });
+      }
+    });
+  }
+
+  /// Subscribes to the family charter and its clauses.
+  /// Called after family data is loaded so [_currentFamily] is available.
+  void _startCharterStreams() {
+    final familyId = _currentFamily?.familyId ?? '';
+    _charterSub = _charterService.watchFamilyCharter(familyId).listen((charter) {
+      if (!mounted) return;
+      setState(() {
+        _familyCharter = charter;
+        _charterLoading = false;
+      });
+      // When the charter doc changes, re-subscribe to its clauses.
+      _clausesSub?.cancel();
+      if (charter != null) {
+        _clausesSub = _charterService.watchClauses(charter.id).listen((clauses) {
+          if (mounted) setState(() => _charterClauses = clauses);
+        });
+      } else {
+        if (mounted) setState(() => _charterClauses = []);
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -286,6 +358,8 @@ class _HomeScreenState extends State<HomeScreen> {
               setState(() {
                 _currentFamily = family;
               });
+              // Now that family is loaded, start charter streams.
+              _startCharterStreams();
             }
           }
         }
@@ -358,42 +432,24 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _loadLessonAnswers(int week) async {
-    final uid = _currentUser?.uid;
-    if (uid != null) {
-      try {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('lessonAnswers')
-            .doc('week_$week')
-            .get();
-        if (doc.exists && doc.data() != null) {
-          final data = doc.data()!;
-          _lessonInput1Controller.text = data['answer1'] ?? '';
-          _lessonInput2Controller.text = data['answer2'] ?? '';
-        } else {
-          _lessonInput1Controller.clear();
-          _lessonInput2Controller.clear();
-        }
-      } catch (e) {
-        _lessonInput1Controller.clear();
-        _lessonInput2Controller.clear();
-      }
-    }
-  }
 
   void _navigateToSubPage(
     String subPage, [
     Map<String, dynamic>? params,
-  ]) async {
+  ]) {
     if (subPage == 'lesson') {
-      final int w = params?['week'] ?? 1;
-      await _loadLessonAnswers(w);
+      _loadLessonContent(params);
     } else if (subPage == 'game_matching') {
+      final game = params?['game'] as GameModel?;
+      if (game != null) _startGameContentStreams(game.id, game.type);
       _initMatchingGame();
     } else if (subPage == 'game_trivia') {
+      final game = params?['game'] as GameModel?;
+      if (game != null) _startGameContentStreams(game.id, game.type);
       _resetTrivia();
+    } else if (subPage == 'game_conversations') {
+      final game = params?['game'] as GameModel?;
+      if (game != null) _startGameContentStreams(game.id, game.type);
     }
 
     setState(() {
@@ -402,10 +458,55 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  /// Starts the three lesson-scoped streams for [InsightCards], [ModuleContent],
+  /// and [UserResponses]. Old subscriptions are cancelled first.
+  void _loadLessonContent(Map<String, dynamic>? params) {
+    final moduleId = params?['moduleId'] as String? ?? '';
+    final uid = _currentUser?.uid ?? '';
+
+    _insightCardsSub?.cancel();
+    _moduleContentSub?.cancel();
+    _responsesSub?.cancel();
+
+    if (moduleId.isEmpty) return;
+
+    setState(() => _lessonContentLoading = true);
+
+    _insightCardsSub =
+        _moduleService.watchInsightCards(moduleId).listen((cards) {
+      if (mounted) setState(() => _activeInsightCards = cards);
+    });
+
+    _moduleContentSub =
+        _moduleService.watchModuleContent(moduleId).listen((items) {
+      if (mounted) {
+        setState(() {
+          _activeModuleContent = items;
+          _lessonContentLoading = false;
+        });
+      }
+    });
+
+    if (uid.isNotEmpty) {
+      _responsesSub =
+          _responseService.watchModuleResponses(uid, moduleId).listen((map) {
+        if (mounted) setState(() => _activeResponses = map);
+      });
+    }
+  }
+
   void _goBack() {
+    // Cancel lesson-scoped streams when leaving a lesson
+    _insightCardsSub?.cancel();
+    _moduleContentSub?.cancel();
+    _responsesSub?.cancel();
     setState(() {
       _activeSubPage = null;
       _subPageParams = null;
+      _activeInsightCards = [];
+      _activeModuleContent = [];
+      _activeResponses = {};
+      _lessonContentLoading = false;
     });
   }
 
@@ -541,7 +642,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Welcome, ${familyName}!',
+                        'Welcome, $familyName!',
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -889,49 +990,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final totalCompleted = (_currentUser?.currentWeek ?? 1) - 1;
     final progressVal = totalCompleted / 8.0;
 
-    final List<Map<String, String>> weeksInfo = [
-      {
-        'week': 'Week 1',
-        'title': 'Family Identity & Structure',
-        'desc':
-            'Define your family identity and establish clear leadership roles',
-      },
-      {
-        'week': 'Week 2',
-        'title': 'Love & Communication',
-        'desc': 'Build healthy communication patterns and emotional connection',
-      },
-      {
-        'week': 'Week 3',
-        'title': 'Boundaries & Safety',
-        'desc': 'Create emotional and physical safety through clear boundaries',
-      },
-      {
-        'week': 'Week 4',
-        'title': 'Core Values & Traditions',
-        'desc': 'Identify core values and build lasting family traditions',
-      },
-      {
-        'week': 'Week 5',
-        'title': 'Roles of Father',
-        'desc': 'Understand and embrace the father\'s unique contribution',
-      },
-      {
-        'week': 'Week 6',
-        'title': 'Roles of Mother',
-        'desc': 'Understand and embrace the mother\'s unique contribution',
-      },
-      {
-        'week': 'Week 7',
-        'title': 'Roles of Children',
-        'desc': 'Foster responsibility, obedience, and character in children',
-      },
-      {
-        'week': 'Week 8',
-        'title': 'Family Governance',
-        'desc': 'Implement family meetings, financial stewardships, and rules',
-      },
-    ];
+    // Use live Firestore modules when available; show loading indicator while
+    // streaming. If Firestore has no data yet the list is empty.
+    final displayModules = _modules;
+    final moduleCount = displayModules.isEmpty ? 8 : displayModules.length;
 
     return Scaffold(
       backgroundColor: AppTheme.lightBeige,
@@ -960,16 +1022,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          '8-Week Program',
-                          style: TextStyle(
+                        Text(
+                          '$moduleCount-Week Program',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
                         Text(
-                          '$totalCompleted/8 Completed',
+                          '$totalCompleted/$moduleCount Completed',
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -1006,117 +1068,183 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: weeksInfo.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final item = weeksInfo[index];
-                  final isUnlocked = index < currentWeek;
-                  final isActive = index == (currentWeek - 1);
-
-                  return GestureDetector(
-                    onTap: isUnlocked
-                        ? () {
-                            _navigateToSubPage('lesson', {'week': index + 1});
-                          }
-                        : null,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isUnlocked ? Colors.white : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isActive
-                              ? AppTheme.oceanBlue
-                              : Colors.grey.shade200,
-                          width: isActive ? 2 : 1,
-                        ),
-                        boxShadow: isUnlocked ? AppTheme.modernShadow : null,
-                      ),
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: isUnlocked
-                                  ? (isActive
-                                        ? AppTheme.oceanBlue.withValues(
-                                            alpha: 0.1,
-                                          )
-                                        : AppTheme.lightBeige)
-                                  : Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              isUnlocked
-                                  ? Icons.menu_book_rounded
-                                  : Icons.lock_outline,
-                              color: isUnlocked
-                                  ? (isActive
-                                        ? AppTheme.oceanBlue
-                                        : AppTheme.textLight)
-                                  : Colors.grey.shade400,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${item['week']} of 8',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isUnlocked
-                                        ? AppTheme.textLight
-                                        : Colors.grey.shade500,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  item['title']!,
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: isUnlocked
-                                        ? AppTheme.textDark
-                                        : Colors.grey.shade600,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  isUnlocked
-                                      ? item['desc']!
-                                      : 'Complete previous weeks to unlock',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isUnlocked
-                                        ? AppTheme.textLight.withValues(
-                                            alpha: 0.8,
-                                          )
-                                        : Colors.grey.shade400,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (isUnlocked)
-                            const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 16,
-                              color: AppTheme.textLight,
-                            ),
-                        ],
+              if (_modulesLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32),
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppTheme.primaryColor,
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: displayModules.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final module = displayModules[index];
+                    final isUnlocked = module.week <= currentWeek;
+                    final isActive = module.week == currentWeek;
+
+                    return GestureDetector(
+                      onTap: isUnlocked
+                          ? () {
+                              _navigateToSubPage('lesson', {
+                                'moduleId': module.id,
+                                'week': module.week,
+                                'module': module,
+                              });
+                            }
+                          : null,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color:
+                              isUnlocked ? Colors.white : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isActive
+                                ? AppTheme.oceanBlue
+                                : Colors.grey.shade200,
+                            width: isActive ? 2 : 1,
+                          ),
+                          boxShadow:
+                              isUnlocked ? AppTheme.modernShadow : null,
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: isUnlocked
+                                    ? (isActive
+                                          ? AppTheme.oceanBlue
+                                                .withValues(alpha: 0.1)
+                                          : AppTheme.lightBeige)
+                                    : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                isUnlocked
+                                    ? Icons.menu_book_rounded
+                                    : Icons.lock_outline,
+                                color: isUnlocked
+                                    ? (isActive
+                                          ? AppTheme.oceanBlue
+                                          : AppTheme.textLight)
+                                    : Colors.grey.shade400,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Week ${module.week}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isUnlocked
+                                          ? AppTheme.textLight
+                                          : Colors.grey.shade500,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    module.title,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: isUnlocked
+                                          ? AppTheme.textDark
+                                          : Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    isUnlocked
+                                        ? module.description
+                                        : 'Complete previous weeks to unlock',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isUnlocked
+                                          ? AppTheme.textLight
+                                                .withValues(alpha: 0.8)
+                                          : Colors.grey.shade400,
+                                    ),
+                                  ),
+                                  if (module.tags.isNotEmpty && isUnlocked) ...[
+                                    const SizedBox(height: 6),
+                                    Wrap(
+                                      spacing: 6,
+                                      children: module.tags
+                                          .take(3)
+                                          .map(
+                                            (tag) => Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.oceanBlue
+                                                    .withValues(alpha: 0.08),
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
+                                              ),
+                                              child: Text(
+                                                tag,
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  color: AppTheme.oceanBlue,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            if (isUnlocked) ...[
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  const Icon(
+                                    Icons.arrow_forward_ios_rounded,
+                                    size: 16,
+                                    color: AppTheme.textLight,
+                                  ),
+                                  if (module.totalModuleXp > 0)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        '${module.totalModuleXp} XP',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.amber.shade700,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               const SizedBox(height: 20),
             ],
           ),
@@ -1127,41 +1255,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildCharterTab() {
     final readinessVal = (_currentFamily?.charterReadinessScore ?? 0.0) / 100.0;
+    final charterTitle =
+        _familyCharter?.title ?? 'Family Charter';
+    final charterPreamble =
+        _familyCharter?.preamble ?? 'Your comprehensive family framework document';
 
-    final List<Map<String, String>> charterSections = [
-      {
-        'title': 'Family Vision Statement',
-        'desc': 'Defining the family\'s long-term visual destination.',
-      },
-      {
-        'title': 'Family Mission & Values',
-        'desc': 'Core commitments and fundamental pillars.',
-      },
-      {
-        'title': 'Family Safety Agreement',
-        'desc': 'Establishing physical, mental and emotional protection.',
-      },
-      {
-        'title': 'Traditions & Celebrations',
-        'desc': 'Key milestones, events, and family bonding habits.',
-      },
-      {
-        'title': 'Father\'s Leadership Intent',
-        'desc': 'Pledges of leadership and active involvement.',
-      },
-      {
-        'title': 'Mother\'s Nurturing Vows',
-        'desc': 'Vows of support, parenting alignment, and love.',
-      },
-      {
-        'title': 'Children\'s Code of Honor',
-        'desc': 'Respect, chores, and behavioral standards.',
-      },
-      {
-        'title': 'Family Constitution',
-        'desc': 'Rules of governance and household agreements.',
-      },
-    ];
+    // Show live Firestore clauses when available, otherwise empty.
+    final displayClauses = _charterClauses;
+    final currentWeek = _currentUser?.currentWeek ?? 1;
 
     return Scaffold(
       backgroundColor: AppTheme.lightBeige,
@@ -1193,25 +1294,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       size: 64,
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'Family Charter',
-                      style: TextStyle(
+                    Text(
+                      charterTitle,
+                      style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Your comprehensive family framework document',
-                      style: TextStyle(fontSize: 13, color: Colors.white70),
+                    Text(
+                      charterPreamble,
+                      style: const TextStyle(
+                          fontSize: 13, color: Colors.white70),
                       textAlign: TextAlign.center,
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
-              // Progress Section Card (themed with periwinkle/blue waves style)
+              // Progress Section Card
               Container(
                 decoration: BoxDecoration(
                   color: const Color(0xFFF5F3FF),
@@ -1273,94 +1376,217 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Charter Sections',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textDark,
-                ),
+              Row(
+                children: [
+                  const Text(
+                    'Charter Clauses',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textDark,
+                    ),
+                  ),
+                  if (displayClauses.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEDE9FE),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${displayClauses.length}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF7C3AED),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 12),
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: charterSections.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final section = charterSections[index];
-                  final isUnlocked =
-                      index < ((_currentUser?.currentWeek ?? 1) - 1);
-
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: isUnlocked ? Colors.white : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isUnlocked
-                            ? Colors.grey.shade200
-                            : Colors.grey.shade200,
+              if (_charterLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32),
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF7C3AED),
                       ),
-                      boxShadow: isUnlocked ? AppTheme.modernShadow : null,
                     ),
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
+                  ),
+                )
+              else if (displayClauses.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Column(
                       children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: isUnlocked
-                                ? const Color(0xFFEDE9FE)
-                                : Colors.grey.shade200,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            isUnlocked
-                                ? Icons.verified_user_rounded
-                                : Icons.lock_outline,
-                            color: isUnlocked
-                                ? const Color(0xFF7C3AED)
-                                : Colors.grey.shade400,
-                            size: 20,
-                          ),
+                        Icon(
+                          Icons.article_outlined,
+                          size: 48,
+                          color: Colors.grey.shade300,
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                section['title']!,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: isUnlocked
-                                      ? AppTheme.textDark
-                                      : Colors.grey.shade600,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                isUnlocked
-                                    ? section['desc']!
-                                    : 'Unlock this section by completing Week ${index + 1}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isUnlocked
-                                      ? AppTheme.textLight
-                                      : Colors.grey.shade400,
-                                ),
-                              ),
-                            ],
+                        const SizedBox(height: 12),
+                        Text(
+                          'No clauses yet.\nComplete weekly modules to build your charter.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 14,
                           ),
                         ),
                       ],
                     ),
-                  );
-                },
-              ),
+                  ),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: displayClauses.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final clause = displayClauses[index];
+                    final isUnlocked = clause.weekReference < currentWeek;
+
+                    return Container(
+                      decoration: BoxDecoration(
+                        color:
+                            isUnlocked ? Colors.white : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.grey.shade200,
+                        ),
+                        boxShadow:
+                            isUnlocked ? AppTheme.modernShadow : null,
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: isUnlocked
+                                  ? const Color(0xFFEDE9FE)
+                                  : Colors.grey.shade200,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              isUnlocked
+                                  ? Icons.verified_user_rounded
+                                  : Icons.lock_outline,
+                              color: isUnlocked
+                                  ? const Color(0xFF7C3AED)
+                                  : Colors.grey.shade400,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: isUnlocked
+                                            ? const Color(0xFFEDE9FE)
+                                            : Colors.grey.shade200,
+                                        borderRadius:
+                                            BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        clause.category,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: isUnlocked
+                                              ? const Color(0xFF7C3AED)
+                                              : Colors.grey.shade500,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Week ${clause.weekReference}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  isUnlocked
+                                      ? clause.statement
+                                      : 'Unlock by completing Week ${clause.weekReference}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: isUnlocked
+                                        ? AppTheme.textDark
+                                        : Colors.grey.shade500,
+                                    fontStyle: isUnlocked
+                                        ? FontStyle.normal
+                                        : FontStyle.italic,
+                                  ),
+                                ),
+                                if (isUnlocked &&
+                                    clause.rationale.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    clause.rationale,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.textLight,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              // Closing commitment (shown only when charter exists and has clauses)
+              if (_familyCharter != null &&
+                  _familyCharter!.closingCommitment.isNotEmpty &&
+                  displayClauses.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F3FF),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFDDD6FE)),
+                  ),
+                  child: Text(
+                    _familyCharter!.closingCommitment,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF5B21B6),
+                      fontStyle: FontStyle.italic,
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
               const SizedBox(height: 20),
             ],
           ),
@@ -1436,34 +1662,64 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Game 1: Matching Game
-              _buildGameMenuCard(
-                title: 'Values Matching Game',
-                desc: 'A fun memory card matchup focusing on core values.',
-                icon: Icons.grid_view_rounded,
-                color: Colors.purple.shade400,
-                onTap: () => _navigateToSubPage('game_matching'),
-              ),
-              const SizedBox(height: 12),
-
-              // Game 2: Trivia
-              _buildGameMenuCard(
-                title: 'Family Wisdom Quiz',
-                desc: 'Multiple choice trivia about communication and values.',
-                icon: Icons.quiz_rounded,
-                color: Colors.teal.shade400,
-                onTap: () => _navigateToSubPage('game_trivia'),
-              ),
-              const SizedBox(height: 12),
-
-              // Game 3: Dinner Conversation cards
-              _buildGameMenuCard(
-                title: 'Conversation Starters',
-                desc: 'A deck of meaningful, fun prompts for the dinner table.',
-                icon: Icons.forum_rounded,
-                color: Colors.pink.shade400,
-                onTap: () => _navigateToSubPage('game_conversations'),
-              ),
+              // ── Dynamic game list from Firestore ─────────────────────────
+              // Add a new document to the `games` Firestore collection to
+              // show a new game card here — no code change needed.
+              if (_gamesLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppTheme.primaryColor,
+                      ),
+                    ),
+                  ),
+                )
+              else if (_gameCatalogue.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.sports_esports_outlined,
+                          size: 48,
+                          color: Colors.grey.shade300,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No games available right now.\nCheck back soon!',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ...List.generate(_gameCatalogue.length, (index) {
+                  final game = _gameCatalogue[index];
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index < _gameCatalogue.length - 1 ? 12 : 0,
+                    ),
+                    child: _buildGameMenuCard(
+                      title: game.title,
+                      desc: game.description,
+                      icon: iconFromString(game.iconName),
+                      color: game.color,
+                      xpReward: game.xpReward,
+                      onTap: () => _navigateToSubPage(
+                        'game_${game.type}',
+                        {'game': game},
+                      ),
+                    ),
+                  );
+                }),
             ],
           ),
         ),
@@ -1471,12 +1727,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+
   Widget _buildGameMenuCard({
     required String title,
     required String desc,
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
+    int xpReward = 0,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -1520,6 +1778,28 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: AppTheme.textLight,
                     ),
                   ),
+                  if (xpReward > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.star_rounded,
+                            size: 12,
+                            color: Colors.amber.shade600,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            '$xpReward XP',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -2421,19 +2701,23 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (_activeSubPage) {
       case 'lesson':
         final int week = _subPageParams?['week'] ?? 1;
-        title = 'Week $week Lesson';
-        child = _buildLessonView(week);
+        final ModuleModel? module = _subPageParams?['module'] as ModuleModel?;
+        title = module != null ? module.title : 'Week $week Lesson';
+        child = _buildLessonView(week, module: module);
         break;
       case 'game_trivia':
-        title = 'Family Wisdom Quiz';
+        final GameModel? tGame = _subPageParams?['game'] as GameModel?;
+        title = tGame?.title ?? 'Family Wisdom Quiz';
         child = _buildTriviaGameView();
         break;
       case 'game_conversations':
-        title = 'Conversation Starters';
+        final GameModel? cGame = _subPageParams?['game'] as GameModel?;
+        title = cGame?.title ?? 'Conversation Starters';
         child = _buildConversationsGameView();
         break;
       case 'game_matching':
-        title = 'Values Matching Game';
+        final GameModel? mGame = _subPageParams?['game'] as GameModel?;
+        title = mGame?.title ?? 'Values Matching Game';
         child = _buildMatchingGameView();
         break;
       default:
@@ -2464,16 +2748,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // LESSON DETAIL VIEW WORKBOOK
-  Widget _buildLessonView(int week) {
-    final data =
-        lessonData[week] ??
-        {
-          'title': 'Weekly Lesson',
-          'subtitle': 'Workbook guidelines and reflection details.',
-          'readText': 'Workbook guidelines details.',
-          'question1': 'Question 1:',
-          'question2': 'Question 2:',
-        };
+  Widget _buildLessonView(int week, {ModuleModel? module}) {
+    // Use the live module data when available.
+    final subtitle = module?.description ??
+        lessonData[week]?['subtitle'] ??
+        'Workbook guidelines and reflection details.';
 
     return SingleChildScrollView(
       child: Padding(
@@ -2481,9 +2760,9 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Week subtitle & description
+            // Module description / subtitle
             Text(
-              data['subtitle']!,
+              subtitle,
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
@@ -2491,140 +2770,742 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
-                boxShadow: AppTheme.modernShadow,
+
+            // ── InsightCards (horizontal scroll) ────────────────────────────
+            if (_activeInsightCards.isNotEmpty) ...[
+              const Text(
+                'Insights',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textDark,
+                ),
               ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Study Reflection Guideline',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textDark,
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 130,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _activeInsightCards.length,
+                  separatorBuilder: (context, index) => const SizedBox(width: 12),
+                  itemBuilder: (context, i) {
+                    final card = _activeInsightCards[i];
+                    return Container(
+                      width: 220,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppTheme.oceanBlue.withValues(alpha: 0.85),
+                            AppTheme.primaryColor.withValues(alpha: 0.85),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: AppTheme.modernShadow,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            card.title,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 6),
+                          Expanded(
+                            child: Text(
+                              card.body,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.white70,
+                                height: 1.35,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+
+            // ── Module Content Items (from Firestore) ────────────────────────
+            if (_lessonContentLoading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppTheme.primaryColor,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    data['readText']!,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppTheme.textLight,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            const Text(
-              'Interactive Worksheet',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textDark,
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Question 1
-            Text(
-              data['question1']!,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textDark,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _lessonInput1Controller,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: 'Type your reflection here...',
-                fillColor: Colors.white,
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
+              )
+            else if (_activeModuleContent.isNotEmpty) ...[
+              const Text(
+                'Activities',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textDark,
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-
-            // Question 2
-            Text(
-              data['question2']!,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textDark,
+              const SizedBox(height: 12),
+              ..._activeModuleContent.map(
+                (item) => _buildModuleContentItem(item),
               ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _lessonInput2Controller,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: 'Type your reflection here...',
-                fillColor: Colors.white,
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Save Progress Button
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  _saveLessonAnswers(
-                    week,
-                    _lessonInput1Controller.text,
-                    _lessonInput2Controller.text,
-                  );
-                },
-                icon: const Icon(
-                  Icons.check_circle_rounded,
-                  color: Colors.white,
-                ),
-                label: const Text(
-                  'Save & Complete Week',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                ),
-              ),
-            ),
+            ] else ...[
+              // ── Fallback: legacy static lesson content ───────────────────
+              // Shown when Firestore has no ModuleContent for this module yet.
+              _buildLegacyLessonContent(week),
+            ],
             const SizedBox(height: 30),
           ],
         ),
       ),
+    );
+  }
+
+  // ── Individual ModuleContent Item Renderer ────────────────────────────────
+  Widget _buildModuleContentItem(ModuleContentModel item) {
+    final existingResponse = _activeResponses[item.id];
+    final uid = _currentUser?.uid ?? '';
+    final familyId = _currentUser?.familyId;
+
+    switch (item.type) {
+      case 'reflection':
+        return _buildReflectionItem(item, existingResponse, uid, familyId);
+      case 'assessment':
+        return _buildAssessmentItem(item, existingResponse, uid, familyId);
+      case 'activity':
+        return _buildActivityItem(item, existingResponse, uid, familyId);
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildReflectionItem(
+    ModuleContentModel item,
+    UserResponseModel? existing,
+    String uid,
+    String? familyId,
+  ) {
+    final controller = TextEditingController(
+      text: existing?.textResponse ?? '',
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: AppTheme.modernShadow,
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.oceanBlue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Reflection',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.oceanBlue,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                if (existing?.isCompleted ?? false)
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.star_rounded,
+                        size: 12,
+                        color: Colors.amber.shade600,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '+${item.xpReward} XP',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              item.question,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textDark,
+              ),
+            ),
+            if (item.description.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                item.description,
+                style: const TextStyle(
+                    fontSize: 12, color: AppTheme.textLight),
+              ),
+            ],
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Write your reflection here...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: uid.isEmpty
+                    ? null
+                    : () async {
+                        final text = controller.text.trim();
+                        if (text.isEmpty) return;
+                        final isFirstSubmit =
+                            !(existing?.isCompleted ?? false);
+                        final response = UserResponseModel(
+                          contentId: item.id,
+                          moduleId: _subPageParams?['moduleId'] as String? ?? '',
+                          type: item.type,
+                          textResponse: text,
+                          xpEarned:
+                              isFirstSubmit ? item.xpReward : (existing?.xpEarned ?? 0),
+                        );
+                        await _responseService.saveResponse(
+                          uid: uid,
+                          response: response,
+                        );
+                        if (isFirstSubmit) {
+                          await _responseService.recordXp(
+                            uid: uid,
+                            familyId: familyId,
+                            xp: item.xpReward,
+                          );
+                        }
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                isFirstSubmit
+                                    ? 'Saved! +${item.xpReward} XP earned 🌟'
+                                    : 'Response updated.',
+                              ),
+                              backgroundColor: AppTheme.successGreen,
+                            ),
+                          );
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.oceanBlue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: Text(
+                  (existing?.isCompleted ?? false) ? 'Update' : 'Save Reflection',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAssessmentItem(
+    ModuleContentModel item,
+    UserResponseModel? existing,
+    String uid,
+    String? familyId,
+  ) {
+    final alreadyAnswered = existing?.selectedOptionId != null;
+    return StatefulBuilder(
+      builder: (context, localSetState) {
+        String? selected =
+            alreadyAnswered ? existing!.selectedOptionId : null;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade200),
+              boxShadow: AppTheme.modernShadow,
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color:
+                            Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Assessment',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.purple.shade700,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    if (alreadyAnswered)
+                      Row(
+                        children: [
+                          Icon(
+                            existing!.isCorrect == true
+                                ? Icons.check_circle_rounded
+                                : Icons.cancel_rounded,
+                            size: 14,
+                            color: existing.isCorrect == true
+                                ? Colors.green
+                                : Colors.red,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${item.xpReward} XP',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  item.question,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textDark,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...item.options.map((opt) {
+                  final isSelected = selected == opt.optionId;
+                  Color bgColor = Colors.white;
+                  Color borderColor = Colors.grey.shade300;
+                  if (alreadyAnswered || selected != null) {
+                    if (opt.isCorrect) {
+                      bgColor = Colors.green.shade50;
+                      borderColor = Colors.green.shade400;
+                    } else if (isSelected && !opt.isCorrect) {
+                      bgColor = Colors.red.shade50;
+                      borderColor = Colors.red.shade400;
+                    }
+                  } else if (isSelected) {
+                    bgColor = AppTheme.oceanBlue.withValues(alpha: 0.08);
+                    borderColor = AppTheme.oceanBlue;
+                  }
+                  return GestureDetector(
+                    onTap: (alreadyAnswered || selected != null)
+                        ? null
+                        : () async {
+                            localSetState(() => selected = opt.optionId);
+                            final isFirstSubmit =
+                                !(existing?.isCompleted ?? false);
+                            final response = UserResponseModel(
+                              contentId: item.id,
+                              moduleId:
+                                  _subPageParams?['moduleId'] as String? ?? '',
+                              type: item.type,
+                              selectedOptionId: opt.optionId,
+                              isCorrect: opt.isCorrect,
+                              xpEarned: isFirstSubmit
+                                  ? item.xpReward
+                                  : (existing?.xpEarned ?? 0),
+                            );
+                            await _responseService.saveResponse(
+                                uid: uid, response: response);
+                            if (isFirstSubmit) {
+                              await _responseService.recordXp(
+                                uid: uid,
+                                familyId: familyId,
+                                xp: item.xpReward,
+                              );
+                            }
+                          },
+                    child: Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: bgColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: borderColor, width: 1.5),
+                      ),
+                      child: Text(
+                        opt.optionText,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textDark,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActivityItem(
+    ModuleContentModel item,
+    UserResponseModel? existing,
+    String uid,
+    String? familyId,
+  ) {
+    final isDone = existing?.isCompleted ?? false;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: isDone
+              ? LinearGradient(
+                  colors: [
+                    Colors.green.shade50,
+                    Colors.green.shade100,
+                  ],
+                )
+              : LinearGradient(
+                  colors: [
+                    Colors.amber.shade50,
+                    Colors.orange.shade50,
+                  ],
+                ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDone ? Colors.green.shade300 : Colors.amber.shade300,
+          ),
+          boxShadow: AppTheme.modernShadow,
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isDone
+                        ? Colors.green.shade100
+                        : Colors.amber.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Activity',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: isDone
+                          ? Colors.green.shade700
+                          : Colors.amber.shade800,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.star_rounded,
+                      size: 12,
+                      color: Colors.amber.shade600,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${item.xpReward} XP',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.amber.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              item.question,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDone
+                    ? Colors.green.shade800
+                    : AppTheme.textDark,
+              ),
+            ),
+            if (item.description.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                item.description,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDone
+                      ? Colors.green.shade600
+                      : AppTheme.textLight,
+                  height: 1.4,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: isDone || uid.isEmpty
+                    ? null
+                    : () async {
+                        final response = UserResponseModel(
+                          contentId: item.id,
+                          moduleId:
+                              _subPageParams?['moduleId'] as String? ?? '',
+                          type: item.type,
+                          textResponse: 'completed',
+                          xpEarned: item.xpReward,
+                        );
+                        await _responseService.saveResponse(
+                            uid: uid, response: response);
+                        await _responseService.recordXp(
+                          uid: uid,
+                          familyId: familyId,
+                          xp: item.xpReward,
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  'Activity completed! +${item.xpReward} XP 🎉'),
+                              backgroundColor: AppTheme.successGreen,
+                            ),
+                          );
+                        }
+                      },
+                icon: Icon(
+                  isDone
+                      ? Icons.check_circle_rounded
+                      : Icons.done_all_rounded,
+                  color: Colors.white,
+                ),
+                label: Text(
+                  isDone ? 'Completed ✓' : 'Mark as Complete',
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      isDone ? Colors.green.shade400 : Colors.amber.shade700,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Legacy static lesson content (fallback when Firestore has no content yet)
+  Widget _buildLegacyLessonContent(int week) {
+    final data = lessonData[week] ??
+        {
+          'subtitle': 'Workbook guidelines and reflection details.',
+          'readText': 'Workbook guidelines details.',
+          'question1': 'Question 1:',
+          'question2': 'Question 2:',
+        };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: AppTheme.modernShadow,
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Study Reflection Guideline',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textDark,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                data['readText'] ?? '',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppTheme.textLight,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'Interactive Worksheet',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textDark,
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Question 1
+        Text(
+          data['question1'] ?? 'Question 1:',
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textDark,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _lessonInput1Controller,
+          maxLines: 3,
+          decoration: InputDecoration(
+            hintText: 'Type your reflection here...',
+            fillColor: Colors.white,
+            filled: true,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Question 2
+        Text(
+          data['question2'] ?? 'Question 2:',
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textDark,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _lessonInput2Controller,
+          maxLines: 3,
+          decoration: InputDecoration(
+            hintText: 'Type your reflection here...',
+            fillColor: Colors.white,
+            filled: true,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Save Progress Button
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              final week = _subPageParams?['week'] as int? ?? 1;
+              _saveLessonAnswers(
+                week,
+                _lessonInput1Controller.text,
+                _lessonInput2Controller.text,
+              );
+            },
+            icon: const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.white,
+            ),
+            label: const Text(
+              'Save & Complete Week',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+            ),
+          ),
+        ),
+        const SizedBox(height: 30),
+      ],
     );
   }
 

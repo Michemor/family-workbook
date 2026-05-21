@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../models/user_model.dart';
 import '../models/family_model.dart';
@@ -24,7 +23,6 @@ class FamilySetupScreen extends StatefulWidget {
 
 class _FamilySetupScreenState extends State<FamilySetupScreen> {
   final _familyService = FamilyService();
-  final _formKey = GlobalKey<FormState>();
 
   // Wizard state
   int _currentStep = 2; // Starts at 2 of 3 (Step 1 is registration/signup)
@@ -117,7 +115,7 @@ class _FamilySetupScreenState extends State<FamilySetupScreen> {
   Future<void> _loadExistingMembers(String familyId) async {
     try {
       // Get initial list from stream
-      final subscription = _familyService.streamFamilyMembers(familyId).listen((members) {
+      _familyService.streamFamilyMembers(familyId).listen((members) {
         if (mounted) {
           setState(() {
             _existingMembersList = members;

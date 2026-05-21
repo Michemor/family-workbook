@@ -13,6 +13,7 @@ class UserModel {
   final bool? isActive;
   final int? completionPercentage;
   final int? currentWeek;
+  final String personalityType;
 
   // New field for tracking profile completion
 
@@ -21,6 +22,7 @@ class UserModel {
     required this.username,
     required this.email,
     this.profilePictureUrl,
+    this.personalityType = 'Unknown',
     this.createdAt,
     this.familyId,
     this.role = 'user',
@@ -41,6 +43,7 @@ class UserModel {
       'createdAt': createdAt?.toIso8601String(),
       'familyId': familyId,
       'role': role,
+      'personalityType': personalityType,
       'contactNumber': contactNumber,
       'subscriptionStatus': subscriptionStatus,
       'isActive': isActive,
@@ -62,11 +65,12 @@ class UserModel {
                 ? (map['createdAt'] as Timestamp).toDate()
                 : DateTime.tryParse(map['createdAt'].toString())),
       familyId:
-          map['familyId'], // BUG FIX: was `map['familyId'] ?? map['familyId']` (no-op)
+          map['familyId'],
       role: map['role'],
       contactNumber: map['contactNumber'],
       subscriptionStatus: map['subscriptionStatus'],
       isActive: map['isActive'],
+      personalityType: map['personalityType'],
       completionPercentage: map['completionPercentage'],
       currentWeek: map['currentWeek'],
     );
