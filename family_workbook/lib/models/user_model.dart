@@ -14,6 +14,7 @@ class UserModel {
   final int? completionPercentage;
   final int? currentWeek;
   final String? personalityType;
+  final int? gamePoints; // points earned from games
 
   // New field for tracking profile completion
 
@@ -31,6 +32,7 @@ class UserModel {
     this.completionPercentage = 0,
     this.currentWeek = 1,
     this.personalityType,
+    this.gamePoints = 0,
   });
 
   // converting to map for database storage
@@ -49,6 +51,7 @@ class UserModel {
       'completionPercentage': completionPercentage,
       'currentWeek': currentWeek,
       'personalityType': personalityType,
+      'gamePoints': gamePoints,
     };
   }
 
@@ -73,6 +76,7 @@ class UserModel {
       completionPercentage: map['completionPercentage'],
       currentWeek: map['currentWeek'],
       personalityType: map['personalityType'],
+      gamePoints: map['gamePoints'] as int? ?? 0,
     );
   }
 }

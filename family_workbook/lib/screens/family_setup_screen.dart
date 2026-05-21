@@ -6,6 +6,7 @@ import '../models/family_model.dart';
 import '../models/family_member_model.dart';
 import '../services/family_service.dart';
 import '../services/auth_service.dart';
+import '../utils/country_data.dart';
 import 'home_screen.dart';
 
 class FamilySetupScreen extends StatefulWidget {
@@ -47,6 +48,8 @@ class _FamilySetupScreenState extends State<FamilySetupScreen> {
   int _activeInviteTab = 0; // 0: Phone, 1: Email, 2: Link
   final _inviteInputController = TextEditingController();
   List<Map<String, String>> _invitedMembers = []; // mock invites list
+  CountryData _selectedInvitePhoneCountry = CountryData.fromCode('US');
+  CountryData _selectedCountry = CountryData.fromCode('US');
 
   // Step 3 Join Meet Family State
   List<FamilyMemberModel> _existingMembersList = [];
@@ -61,6 +64,148 @@ class _FamilySetupScreenState extends State<FamilySetupScreen> {
   ];
 
   String? _uploadedPhotoUrl;
+
+  /// Opens a searchable country name picker dialog and updates [_selectedCountry]
+  void _showCountryPickerDialog() {
+    final searchCtrl = TextEditingController();
+    List<CountryData> filtered = CountryData.all;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.white,
+          title: const Text('Select Country',
+              style: TextStyle(color: AppTheme.deepNavy, fontWeight: FontWeight.bold)),
+          content: SizedBox(
+            width: 340,
+            height: 420,
+            child: Column(children: [
+              TextField(
+                controller: searchCtrl,
+                decoration: InputDecoration(
+                  hintText: 'Search country...',
+                  prefixIcon: const Icon(Icons.search, color: AppTheme.oceanBlue),
+                  filled: true,
+                  fillColor: AppTheme.lightBeige,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                ),
+                onChanged: (q) => setS(() {
+                  filtered = CountryData.all
+                      .where((c) => c.name.toLowerCase().contains(q.toLowerCase()))
+                      .toList();
+                }),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) {
+                    final c = filtered[i];
+                    final sel = c.code == _selectedCountry.code;
+                    return ListTile(
+                      dense: true,
+                      leading: Text(c.flag, style: const TextStyle(fontSize: 22)),
+                      title: Text(c.name,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+                            color: sel ? AppTheme.oceanBlue : AppTheme.textDark,
+                          )),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      tileColor: sel ? AppTheme.lightBeige : null,
+                      onTap: () {
+                        setState(() {
+                          _selectedCountry = c;
+                          _countryController.text = c.name;
+                        });
+                        Navigator.of(ctx).pop();
+                      },
+                    );
+                  },
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Opens a searchable country code picker for the phone invite tab
+  void _showPhoneCountryCodePicker() {
+    final searchCtrl = TextEditingController();
+    List<CountryData> filtered = CountryData.all;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.white,
+          title: const Text('Select Country Code',
+              style: TextStyle(color: AppTheme.deepNavy, fontWeight: FontWeight.bold)),
+          content: SizedBox(
+            width: 340,
+            height: 420,
+            child: Column(children: [
+              TextField(
+                controller: searchCtrl,
+                decoration: InputDecoration(
+                  hintText: 'Search...',
+                  prefixIcon: const Icon(Icons.search, color: AppTheme.oceanBlue),
+                  filled: true,
+                  fillColor: AppTheme.lightBeige,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+                onChanged: (q) => setS(() {
+                  filtered = CountryData.all
+                      .where((c) =>
+                          c.name.toLowerCase().contains(q.toLowerCase()) ||
+                          c.dialCode.contains(q))
+                      .toList();
+                }),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) {
+                    final c = filtered[i];
+                    final sel = c.code == _selectedInvitePhoneCountry.code;
+                    return ListTile(
+                      dense: true,
+                      leading: Text(c.flag, style: const TextStyle(fontSize: 22)),
+                      title: Text(c.name,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: sel ? AppTheme.oceanBlue : AppTheme.textDark,
+                            fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+                          )),
+                      trailing: Text(c.dialCode,
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: sel ? AppTheme.oceanBlue : AppTheme.textLight)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      tileColor: sel ? AppTheme.lightBeige : null,
+                      onTap: () {
+                        setState(() => _selectedInvitePhoneCountry = c);
+                        Navigator.of(ctx).pop();
+                      },
+                    );
+                  },
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
 
   void _simulatePhotoUpload() {
     showDialog(
@@ -665,23 +810,40 @@ class _FamilySetupScreenState extends State<FamilySetupScreen> {
                         style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.deepNavy),
                       ),
                       const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _countryController,
-                        style: const TextStyle(fontSize: 14, color: AppTheme.deepNavy),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: AppTheme.lightBeige,
-                          hintText: 'United States',
-                          contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                          border: OutlineInputBorder(
+                      GestureDetector(
+                        onTap: _showCountryPickerDialog,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: AppTheme.lightBeige,
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
+                          ),
+                          child: Row(
+                            children: [
+                              Text(_selectedCountry.flag,
+                                  style: const TextStyle(fontSize: 18)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _selectedCountry.name,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppTheme.textDark,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const Icon(Icons.keyboard_arrow_down_rounded,
+                                  color: AppTheme.oceanBlue, size: 18),
+                            ],
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
+
               ],
             ),
           ],
@@ -1035,6 +1197,40 @@ class _FamilySetupScreenState extends State<FamilySetupScreen> {
               // Phone/Email invite input
               Row(
                 children: [
+                  // Country code picker (only for phone tab)
+                  if (_activeInviteTab == 0) ...[
+                    GestureDetector(
+                      onTap: _showPhoneCountryCodePicker,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: AppTheme.lightBeige,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppTheme.skyBlue.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(_selectedInvitePhoneCountry.flag,
+                                style: const TextStyle(fontSize: 20)),
+                            const SizedBox(width: 4),
+                            Text(
+                              _selectedInvitePhoneCountry.dialCode,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textDark,
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            const Icon(Icons.keyboard_arrow_down_rounded,
+                                size: 14, color: AppTheme.textLight),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: TextFormField(
                       controller: _inviteInputController,
@@ -1045,7 +1241,7 @@ class _FamilySetupScreenState extends State<FamilySetupScreen> {
                         filled: true,
                         fillColor: AppTheme.lightBeige,
                         hintText: _activeInviteTab == 0
-                            ? '+1 (555) 000-0000'
+                            ? '7XX XXX XXX'
                             : 'name@email.com',
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16,

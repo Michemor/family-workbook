@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../utils/password_validator.dart';
+import '../utils/country_data.dart';
 import '../services/auth_service.dart';
 import 'sign_in_screen.dart';
 import 'family_setup_screen.dart';
@@ -19,10 +20,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _phoneController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
   bool _isJoining = false;
+  CountryData _selectedPhoneCountry = CountryData.fromCode('US');
   Map<String, bool> _passwordRequirements = {
     'length': false,
     'uppercase': false,
@@ -37,6 +40,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -117,6 +121,97 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _passwordRequirements = PasswordValidator.getRequirements(password);
     });
   }
+
+  void _showCountryCodePicker() {
+    final searchController = TextEditingController();
+    List<CountryData> filtered = CountryData.all;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            backgroundColor: Colors.white,
+            title: const Text(
+              'Select Country Code',
+              style: TextStyle(color: AppTheme.deepNavy, fontWeight: FontWeight.bold),
+            ),
+            content: SizedBox(
+              width: 340,
+              height: 420,
+              child: Column(
+                children: [
+                  TextField(
+                    controller: searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search country...',
+                      prefixIcon: const Icon(Icons.search, color: AppTheme.oceanBlue),
+                      filled: true,
+                      fillColor: AppTheme.lightBeige,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                    ),
+                    onChanged: (query) {
+                      setDialogState(() {
+                        filtered = CountryData.all
+                            .where((c) =>
+                                c.name.toLowerCase().contains(query.toLowerCase()) ||
+                                c.dialCode.contains(query))
+                            .toList();
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: filtered.length,
+                      itemBuilder: (context, i) {
+                        final country = filtered[i];
+                        final isSelected = country.code == _selectedPhoneCountry.code;
+                        return ListTile(
+                          dense: true,
+                          leading: Text(country.flag, style: const TextStyle(fontSize: 22)),
+                          title: Text(
+                            country.name,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: isSelected ? AppTheme.oceanBlue : AppTheme.textDark,
+                            ),
+                          ),
+                          trailing: Text(
+                            country.dialCode,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isSelected ? AppTheme.oceanBlue : AppTheme.textLight,
+                            ),
+                          ),
+                          tileColor: isSelected ? AppTheme.lightBeige : null,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          onTap: () {
+                            setState(() {
+                              _selectedPhoneCountry = country;
+                            });
+                            Navigator.of(context).pop();
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -364,6 +459,53 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               }
                               return null;
                             },
+                          ),
+                          const SizedBox(height: 16),
+                          // Phone Number Field
+                          _buildFormLabel('Phone Number (Optional)'),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              // Country code picker button
+                              GestureDetector(
+                                onTap: () => _showCountryCodePicker(),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.lightBeige,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppTheme.softTan.withValues(alpha: 0.5)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(_selectedPhoneCountry.flag, style: const TextStyle(fontSize: 20)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _selectedPhoneCountry.dialCode,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppTheme.textDark,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: AppTheme.textLight),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _phoneController,
+                                  keyboardType: TextInputType.phone,
+                                  decoration: const InputDecoration(
+                                    hintText: '7XX XXX XXX',
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 24),
                           // Family Path Option Section
