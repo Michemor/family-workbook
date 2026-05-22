@@ -23,6 +23,7 @@ class UserModel {
     required this.username,
     required this.email,
     this.profilePictureUrl,
+    this.personalityType = 'Unknown',
     this.createdAt,
     this.familyId,
     this.role = 'user',
@@ -31,7 +32,6 @@ class UserModel {
     this.isActive = true,
     this.completionPercentage = 0,
     this.currentWeek = 1,
-    this.personalityType,
     this.gamePoints = 0,
   });
 
@@ -45,12 +45,12 @@ class UserModel {
       'createdAt': createdAt?.toIso8601String(),
       'familyId': familyId,
       'role': role,
+      'personalityType': personalityType,
       'contactNumber': contactNumber,
       'subscriptionStatus': subscriptionStatus,
       'isActive': isActive,
       'completionPercentage': completionPercentage,
       'currentWeek': currentWeek,
-      'personalityType': personalityType,
       'gamePoints': gamePoints,
     };
   }
@@ -68,14 +68,14 @@ class UserModel {
                 ? (map['createdAt'] as Timestamp).toDate()
                 : DateTime.tryParse(map['createdAt'].toString())),
       familyId:
-          map['familyId'], // BUG FIX: was `map['familyId'] ?? map['familyId']` (no-op)
+          map['familyId'],
       role: map['role'],
       contactNumber: map['contactNumber'],
       subscriptionStatus: map['subscriptionStatus'],
       isActive: map['isActive'],
+      personalityType: map['personalityType'],
       completionPercentage: map['completionPercentage'],
       currentWeek: map['currentWeek'],
-      personalityType: map['personalityType'],
       gamePoints: map['gamePoints'] as int? ?? 0,
     );
   }
