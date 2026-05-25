@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../utils/password_validator.dart';
+import '../utils/country_data.dart';
 import '../services/auth_service.dart';
-import '../services/family_service.dart';
 import 'sign_in_screen.dart';
-import 'home_screen.dart';
+import 'family_setup_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -15,19 +15,17 @@ class SignUpScreen extends StatefulWidget {
 
 class _SignUpScreenState extends State<SignUpScreen> {
   final _authService = AuthService();
-  final _familyService = FamilyService();
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _familyNameController = TextEditingController();
-  final _countryController = TextEditingController();
-  
-  String? _selectedFamilyType;
+  final _phoneController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
+  bool _isJoining = false;
+  CountryData _selectedPhoneCountry = CountryData.fromCode('US');
   Map<String, bool> _passwordRequirements = {
     'length': false,
     'uppercase': false,
@@ -36,35 +34,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
     'symbol': false,
   };
 
-  final List<String> _familyTypes = [
-    'Nuclear Family',
-    'Extended Family',
-    'Single Parent',
-    'Blended Family',
-    'Adoptive Family',
-    'Other',
-  ];
-
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _familyNameController.dispose();
-    _countryController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
   void _handleSignUp() async {
     if (_formKey.currentState!.validate()) {
-      if (_selectedFamilyType == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a family type')),
-        );
-        return;
-      }
-
       if (!PasswordValidator.isValid(_passwordController.text)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -88,26 +69,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
         );
 
         if (user != null) {
-          // Step 2: Create family atomically
-          await _familyService.createFamily(
-            uid: user.uid,
-            username: user.username,
-            familyName: _familyNameController.text.trim(),
-            familyType: _selectedFamilyType!,
-            country: _countryController.text.trim(),
-            role: 'Father', // Default test role
-          );
-
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Account and Family created successfully!'),
+                content: Text('Account created successfully! Let\'s set up your family.'),
                 backgroundColor: AppTheme.successGreen,
               ),
             );
-            // Navigate to home screen
+            // Navigate to FamilySetupScreen
             Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (context) => const HomeScreen()),
+              MaterialPageRoute(
+                builder: (context) => FamilySetupScreen(
+                  isJoining: _isJoining,
+                  user: user,
+                ),
+              ),
               (route) => false,
             );
           }
@@ -145,6 +121,97 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _passwordRequirements = PasswordValidator.getRequirements(password);
     });
   }
+
+  void _showCountryCodePicker() {
+    final searchController = TextEditingController();
+    List<CountryData> filtered = CountryData.all;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            backgroundColor: Colors.white,
+            title: const Text(
+              'Select Country Code',
+              style: TextStyle(color: AppTheme.deepNavy, fontWeight: FontWeight.bold),
+            ),
+            content: SizedBox(
+              width: 340,
+              height: 420,
+              child: Column(
+                children: [
+                  TextField(
+                    controller: searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search country...',
+                      prefixIcon: const Icon(Icons.search, color: AppTheme.oceanBlue),
+                      filled: true,
+                      fillColor: AppTheme.lightBeige,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                    ),
+                    onChanged: (query) {
+                      setDialogState(() {
+                        filtered = CountryData.all
+                            .where((c) =>
+                                c.name.toLowerCase().contains(query.toLowerCase()) ||
+                                c.dialCode.contains(query))
+                            .toList();
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: filtered.length,
+                      itemBuilder: (context, i) {
+                        final country = filtered[i];
+                        final isSelected = country.code == _selectedPhoneCountry.code;
+                        return ListTile(
+                          dense: true,
+                          leading: Text(country.flag, style: const TextStyle(fontSize: 22)),
+                          title: Text(
+                            country.name,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: isSelected ? AppTheme.oceanBlue : AppTheme.textDark,
+                            ),
+                          ),
+                          trailing: Text(
+                            country.dialCode,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isSelected ? AppTheme.oceanBlue : AppTheme.textLight,
+                            ),
+                          ),
+                          tileColor: isSelected ? AppTheme.lightBeige : null,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          onTap: () {
+                            setState(() {
+                              _selectedPhoneCountry = country;
+                            });
+                            Navigator.of(context).pop();
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -393,97 +460,194 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               return null;
                             },
                           ),
-                          const SizedBox(height: 24),
-                          // Family Information Section
-                          Text(
-                            'Family Information',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
                           const SizedBox(height: 16),
-                          // Family Name Field
-                          _buildFormLabel('Family Name'),
+                          // Phone Number Field
+                          _buildFormLabel('Phone Number (Optional)'),
                           const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _familyNameController,
-                            decoration: InputDecoration(
-                              prefixIcon: Icon(
-                                Icons.family_restroom_outlined,
-                                color: AppTheme.primaryColor,
-                              ),
-                              hintText: 'The Smith Family',
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your family name';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          // Family Type Dropdown
-                          _buildFormLabel('Family Type'),
-                          const SizedBox(height: 8),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: AppTheme.softTan,
-                                width: 1.5,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: DropdownButton<String>(
-                              isExpanded: true,
-                              value: _selectedFamilyType,
-                              hint: const Padding(
-                                padding: EdgeInsets.only(left: 16),
-                                child: Text(
-                                  'Select family type',
-                                  style: TextStyle(color: AppTheme.textLight),
+                          Row(
+                            children: [
+                              // Country code picker button
+                              GestureDetector(
+                                onTap: () => _showCountryCodePicker(),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.lightBeige,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppTheme.softTan.withValues(alpha: 0.5)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(_selectedPhoneCountry.flag, style: const TextStyle(fontSize: 20)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _selectedPhoneCountry.dialCode,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppTheme.textDark,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: AppTheme.textLight),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              underline: Container(),
-                              items: _familyTypes.map((String value) {
-                                return DropdownMenuItem<String>(
-                                  value: value,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(left: 16),
-                                    child: Text(value),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _phoneController,
+                                  keyboardType: TextInputType.phone,
+                                  decoration: const InputDecoration(
+                                    hintText: '7XX XXX XXX',
                                   ),
-                                );
-                              }).toList(),
-                              onChanged: (String? newValue) {
-                                setState(() {
-                                  _selectedFamilyType = newValue;
-                                });
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          // Country Field
-                          _buildFormLabel('Country'),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _countryController,
-                            decoration: InputDecoration(
-                              prefixIcon: Icon(
-                                Icons.public_outlined,
-                                color: AppTheme.primaryColor,
+                                ),
                               ),
-                              hintText: 'United States',
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your country';
-                              }
-                              return null;
-                            },
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          // Family Path Option Section
+                          Text(
+                            'Choose Family Option',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _isJoining = false;
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                                    decoration: BoxDecoration(
+                                      gradient: !_isJoining ? AppTheme.primaryOmbre : null,
+                                      color: _isJoining ? Colors.white : null,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: !_isJoining 
+                                            ? AppTheme.deepNavy 
+                                            : AppTheme.softTan.withValues(alpha: 0.4),
+                                        width: 2,
+                                      ),
+                                      boxShadow: !_isJoining ? AppTheme.modernShadow : null,
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Icon(
+                                          Icons.add_home_rounded,
+                                          color: !_isJoining ? Colors.white : AppTheme.textLight,
+                                          size: 32,
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Text(
+                                          'Start Family',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                            color: !_isJoining ? Colors.white : AppTheme.textDark,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          'Create a new account for your home',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: !_isJoining 
+                                                ? Colors.white.withValues(alpha: 0.9) 
+                                                : AppTheme.textLight,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _isJoining = true;
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                                    decoration: BoxDecoration(
+                                      gradient: _isJoining ? AppTheme.primaryOmbre : null,
+                                      color: !_isJoining ? Colors.white : null,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: _isJoining 
+                                            ? AppTheme.deepNavy 
+                                            : AppTheme.softTan.withValues(alpha: 0.4),
+                                        width: 2,
+                                      ),
+                                      boxShadow: _isJoining ? AppTheme.modernShadow : null,
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Icon(
+                                          Icons.group_add_rounded,
+                                          color: _isJoining ? Colors.white : AppTheme.textLight,
+                                          size: 32,
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Text(
+                                          'Join Family',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                            color: _isJoining ? Colors.white : AppTheme.textDark,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          'Connect to an existing family space',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: _isJoining 
+                                                ? Colors.white.withValues(alpha: 0.9) 
+                                                : AppTheme.textLight,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 28),
                           // Create Account Button
-                          SizedBox(
+                          Container(
                             width: double.infinity,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [AppTheme.deepNavy, AppTheme.oceanBlue],
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                              ),
+                              borderRadius: BorderRadius.circular(28),
+                              boxShadow: AppTheme.modernShadow,
+                            ),
                             child: ElevatedButton(
                               onPressed: _isLoading ? null : _handleSignUp,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                ),
+                              ),
                               child: _isLoading
                                   ? const Row(
                                       mainAxisAlignment:
@@ -492,8 +656,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                         SizedBox(
                                           width: 18,
                                           height: 18,
-                                          child:
-                                              CircularProgressIndicator(
+                                          child: CircularProgressIndicator(
                                             strokeWidth: 2,
                                             valueColor:
                                                 AlwaysStoppedAnimation<Color>(
@@ -505,7 +668,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                         Text('Creating Account...'),
                                       ],
                                     )
-                                  : const Text('Create Account'),
+                                  : const Text(
+                                      'Create Account',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                             ),
                           ),
                           const SizedBox(height: 16),

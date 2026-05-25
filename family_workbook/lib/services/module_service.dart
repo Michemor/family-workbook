@@ -25,7 +25,6 @@ class ModuleService {
     try {
       await for (final snap in _db
           .collection('Modules')
-          .where('active', isEqualTo: true)
           .orderBy('week')
           .snapshots()) {
         yield snap.docs
