@@ -14,9 +14,7 @@ class AuthService {
     String? phoneNumber,
     String? role,
     String? familyId,
-    bool? isActive,
-    String? subscriptionStatus,
-    String? profilePictureUrl,
+    bool isPaid = false,
   }) async {
     try {
       UserCredential cred = await _auth.createUserWithEmailAndPassword(
@@ -33,11 +31,9 @@ class AuthService {
           createdAt: DateTime.now(),
           role: role,
           contactNumber: phoneNumber,
-          familyId: familyId,
-          isActive: isActive,
-          subscriptionStatus: subscriptionStatus,
-          profilePictureUrl: profilePictureUrl,
+          isPaid: isPaid,
         );
+
 
         Map<String, dynamic> userMap = newUser.toMap();
         userMap['createdAt'] =
@@ -158,15 +154,15 @@ class AuthService {
     await _auth.signOut();
   }
 
-  Future<void> updateSubscription(String status) async {
+  Future<void> updatePaymentStatus(bool isPaid) async {
     User? currentUser = _auth.currentUser;
     if (currentUser != null) {
       try {
         await _firestore.collection('users').doc(currentUser.uid).update({
-          'subscriptionStatus': status,
+          'isPaid': isPaid,
         });
       } catch (e) {
-        debugPrint('Error updating subscription: $e');
+        debugPrint('Error updating payment status: $e');
         rethrow;
       }
     }
@@ -177,5 +173,46 @@ class AuthService {
     // This typically involves using the google_sign_in package to authenticate with Google
     // and then using the obtained credentials to sign in with Firebase Auth.
     return null; // Placeholder return
+  }
+
+  /// Ensures that a default admin user exists in the system.
+  Future<void> ensureDefaultAdmin() async {
+    const adminEmail = 'admin@familyworkbook.com';
+    const adminPassword = 'Admin@123';
+    
+    try {
+      // Attempt to create the admin user directly
+      UserCredential cred = await _auth.createUserWithEmailAndPassword(
+        email: adminEmail,
+        password: adminPassword,
+      );
+
+      if (cred.user != null) {
+        UserModel adminUser = UserModel(
+          uid: cred.user!.uid,
+          username: 'System Admin',
+          email: adminEmail,
+          role: 'admin',
+          isPaid: true,
+          completionPercentage: 100,
+          currentWeek: 8,
+          gamePoints: 9999,
+        );
+
+        Map<String, dynamic> userMap = adminUser.toMap();
+        userMap['createdAt'] = FieldValue.serverTimestamp();
+        
+        await _firestore.collection('users').doc(cred.user!.uid).set(userMap);
+        debugPrint('Default admin user created successfully.');
+      }
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        debugPrint('Default admin user already exists.');
+      } else {
+        debugPrint('Error ensuring default admin: ${e.message}');
+      }
+    } catch (e) {
+      debugPrint('Error ensuring default admin: $e');
+    }
   }
 }

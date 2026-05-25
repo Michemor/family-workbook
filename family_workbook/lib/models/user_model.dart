@@ -9,7 +9,7 @@ class UserModel {
   final String? familyId;
   final String? role; // e.g., 'admin', 'member'
   final String? contactNumber;
-  final String? subscriptionStatus; // e.g., 'free', 'premium'
+  final bool isPaid; // true = user has paid and has access
   final bool? isActive;
   final int? completionPercentage;
   final int? currentWeek;
@@ -28,7 +28,7 @@ class UserModel {
     this.familyId,
     this.role = 'user',
     this.contactNumber,
-    this.subscriptionStatus = 'trial',
+    this.isPaid = false,
     this.isActive = true,
     this.completionPercentage = 0,
     this.currentWeek = 1,
@@ -47,7 +47,7 @@ class UserModel {
       'role': role,
       'personalityType': personalityType,
       'contactNumber': contactNumber,
-      'subscriptionStatus': subscriptionStatus,
+      'isPaid': isPaid,
       'isActive': isActive,
       'completionPercentage': completionPercentage,
       'currentWeek': currentWeek,
@@ -71,7 +71,7 @@ class UserModel {
           map['familyId'],
       role: map['role'],
       contactNumber: map['contactNumber'],
-      subscriptionStatus: map['subscriptionStatus'],
+      isPaid: map['isPaid'] as bool? ?? false,
       isActive: map['isActive'],
       personalityType: map['personalityType'],
       completionPercentage: map['completionPercentage'],
