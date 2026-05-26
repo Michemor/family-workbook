@@ -1,10 +1,27 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/family_service.dart';
+import '../services/game_service.dart';
+import '../services/module_service.dart';
+import '../services/charter_service.dart';
+import '../services/response_service.dart';
 import '../models/user_model.dart';
 import '../models/family_model.dart';
+import '../models/family_member_model.dart';
+import '../models/game_model.dart';
+import '../models/module_model.dart';
+import '../models/insight_card_model.dart';
+import '../models/module_content_model.dart';
+import '../models/family_charter_model.dart';
+import '../models/user_response_model.dart';
+import '../utils/icon_mapper.dart';
+import 'home/shared/xp_badge.dart';
+import 'home/shared/page_indicator.dart';
+import 'home/shared/empty_state.dart';
+import 'home/shared/stat_card.dart';
 import 'welcome_screen.dart';
 import 'family_setup_screen.dart';
 
@@ -18,6 +35,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _authService = AuthService();
   final _familyService = FamilyService();
+  final _gameService = GameService();
+  final _moduleService = ModuleService();
+  final _charterService = CharterService();
+  final _responseService = ResponseService();
   UserModel? _currentUser;
   FamilyModel? _currentFamily;
   bool _isLoadingData = true;
@@ -55,7 +76,55 @@ class _HomeScreenState extends State<HomeScreen> {
   int _matchingMoves = 0;
 
   // Conversation Starter state
-  int _convoIndex = 0;
+  final int _convoIndex = 0;
+
+  // ── Game backend streams ───────────────────────────────────────────────────
+  /// Live game catalogue fetched from Firestore `Games` collection.
+  List<GameModel> _gameCatalogue = [];
+  bool _gamesLoading = true;
+
+  /// Live game content — populated from Firestore, with offline fallback.
+  List<Map<String, dynamic>> _triviaQuestions = [];
+  List<String> _convoCards = [];
+  List<String> _matchingValuePool = [];
+
+  // ── Module backend streams ─────────────────────────────────────────────────
+  List<ModuleModel> _modules = [];
+  bool _modulesLoading = true;
+
+  // Active lesson — populated when the user navigates into a lesson subpage.
+  List<InsightCardModel> _activeInsightCards = [];
+  List<ModuleContentModel> _activeModuleContent = [];
+  /// Responses keyed by contentId for O(1) lookup in the lesson view.
+  Map<String, UserResponseModel> _activeResponses = {};
+  bool _lessonContentLoading = false;
+
+  // ── Lesson PageView controller ─────────────────────────────────────────────
+  final PageController _lessonPageController = PageController();
+  int _lessonPageIndex = 0;
+  bool _assessmentAnswered = false;
+
+  // ── Charter backend streams ────────────────────────────────────────────────
+  FamilyCharterModel? _familyCharter;
+  List<CharterClause> _charterClauses = [];
+  bool _charterLoading = true;
+
+  // ── Family members stream ────────────────────────────────────────────────
+  List<FamilyMemberModel> _familyMembers = [];
+  StreamSubscription<List<FamilyMemberModel>>? _familyMembersSub;
+
+  // Stream subscriptions (cancelled in dispose)
+  StreamSubscription<List<GameModel>>? _catalogueSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _triviaSub;
+  StreamSubscription<List<String>>? _convoSub;
+  StreamSubscription<List<String>>? _matchingSub;
+  StreamSubscription<List<ModuleModel>>? _modulesSub;
+  StreamSubscription<FamilyCharterModel?>? _charterSub;
+  StreamSubscription<List<CharterClause>>? _clausesSub;
+  // Lesson-scoped subscriptions — cancelled on exit
+  StreamSubscription<List<InsightCardModel>>? _insightCardsSub;
+  StreamSubscription<List<ModuleContentModel>>? _moduleContentSub;
+  StreamSubscription<Map<String, UserResponseModel>>? _responsesSub;
 
   final List<String> weekTopics = [
     'Definition of Family',
@@ -69,79 +138,9 @@ class _HomeScreenState extends State<HomeScreen> {
     'Household Governance Concepts',
   ];
 
-  final List<Map<String, dynamic>> _triviaQuestions = [
-    {
-      'question': 'Which of these is a core key to building family trust?',
-      'options': [
-        'Active listening & honesty',
-        'Buying expensive gifts',
-        'Avoiding conversation',
-        'Ignoring household rules',
-      ],
-      'answerIndex': 0,
-    },
-    {
-      'question': 'What is the primary purpose of a Family Charter?',
-      'options': [
-        'To track daily chores only',
-        'To define shared values and structure',
-        'To assign homework punishments',
-        'To list family recipes',
-      ],
-      'answerIndex': 1,
-    },
-    {
-      'question':
-          'How should conflicts be addressed in a healthy family structure?',
-      'options': [
-        'Silent treatment',
-        'Shouting at each other',
-        'Respectful dialogue and seeking common ground',
-        'Pretending nothing happened',
-      ],
-      'answerIndex': 2,
-    },
-    {
-      'question': 'Which of the following is NOT one of the 8 weekly modules?',
-      'options': [
-        'Boundaries & Safety',
-        'Roles of Children',
-        'Family Identity & Structure',
-        'Advanced Cooking Skills',
-      ],
-      'answerIndex': 3,
-    },
-    {
-      'question': 'How often should a family hold family governance meetings?',
-      'options': [
-        'Once a year',
-        'Regularly (e.g. weekly or monthly)',
-        'Only during crises',
-        'Never',
-      ],
-      'answerIndex': 1,
-    },
-  ];
-
-  final List<String> _convoCards = [
-    "What is your absolute favorite memory of our family doing something together?",
-    "If our family had a theme song or motto, what would you want it to be?",
-    "What is one thing you appreciate most about the person sitting next to you?",
-    "If you could travel anywhere in the world with the family tomorrow, where would you go?",
-    "What is a family tradition you want to make sure we keep doing forever?",
-    "What is one value you think is most important for our household?",
-    "If you could trade places with any other family member for one day, who would it be and why?",
-    "What was the most challenging part of your week, and how did you overcome it?",
-  ];
-
-  final List<String> _matchingValuePool = [
-    'Love 💖',
-    'Trust 🤝',
-    'Safety 🛡️',
-    'Respect 🙌',
-    'Fun 🎉',
-    'Unity 🧩',
-  ];
+  // Hardcoded lists removed — game content now streams from Firestore via
+  // GameService. Fallback data lives in GameService._fallback* constants.
+  // _triviaQuestions, _convoCards, _matchingValuePool are declared above.
 
   final Map<int, Map<String, dynamic>> lessonData = {
     1: {
@@ -221,7 +220,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _lessonPageController.addListener(() {
+      if (mounted) {
+        setState(() {
+          _lessonPageIndex = _lessonPageController.page?.round() ?? 0;
+        });
+      }
+    });
     _loadData();
+    _startGameStreams();
+    _startModuleStreams();
+    _startCharterStreams();
 
     // Card input listeners to dynamically draw on the preview card
     _cardNumberController.addListener(() {
@@ -251,12 +260,108 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    // Cancel all stream subscriptions
+    _catalogueSub?.cancel();
+    _triviaSub?.cancel();
+    _convoSub?.cancel();
+    _matchingSub?.cancel();
+    _modulesSub?.cancel();
+    _charterSub?.cancel();
+    _clausesSub?.cancel();
+    _familyMembersSub?.cancel();
+    _insightCardsSub?.cancel();
+    _moduleContentSub?.cancel();
+    _responsesSub?.cancel();
+    _lessonPageController.dispose();
     _cardNumberController.dispose();
     _expiryController.dispose();
     _cvvController.dispose();
     _lessonInput1Controller.dispose();
     _lessonInput2Controller.dispose();
     super.dispose();
+  }
+
+  /// Subscribes to the Firestore game catalogue stream.
+  /// Content streams (trivia/conversations/matching) are started lazily when
+  /// the user selects a specific game, so we can pass the correct [gameId].
+  void _startGameStreams() {
+    _catalogueSub = _gameService.watchGameCatalogue().listen((games) {
+      if (mounted) {
+        setState(() {
+          _gameCatalogue = games;
+          _gamesLoading = false;
+        });
+      }
+    });
+  }
+
+  /// Starts content streams for a specific game by its Firestore [gameId].
+  void _startGameContentStreams(String gameId, String gameType) {
+    _triviaSub?.cancel();
+    _convoSub?.cancel();
+    _matchingSub?.cancel();
+
+    switch (gameType) {
+      case 'trivia':
+        _triviaSub = _gameService.watchTriviaQuestions(gameId).listen((q) {
+          if (mounted) setState(() => _triviaQuestions = q);
+        });
+        break;
+      case 'conversations':
+        _convoSub = _gameService.watchConversationCards(gameId).listen((c) {
+          if (mounted) setState(() => _convoCards = c);
+        });
+        break;
+      case 'matching':
+        _matchingSub = _gameService.watchMatchingValues(gameId).listen((v) {
+          if (mounted) setState(() => _matchingValuePool = v);
+        });
+        break;
+    }
+  }
+
+  /// Subscribes to live modules from Firestore.
+  void _startModuleStreams() {
+    _modulesSub = _moduleService.watchModules().listen((modules) {
+      if (mounted) {
+        setState(() {
+          _modules = modules;
+          _modulesLoading = false;
+        });
+      }
+    });
+  }
+
+  void _startFamilyMembersStream() {
+    final familyId = _currentFamily?.familyId ?? '';
+    if (familyId.isNotEmpty) {
+      _familyMembersSub?.cancel();
+      _familyMembersSub = _familyService.streamFamilyMembers(familyId).listen((members) {
+        if (mounted) setState(() => _familyMembers = members);
+      });
+    }
+  }
+
+  /// Subscribes to the family charter and its clauses.
+  /// Called after family data is loaded so [_currentFamily] is available.
+  void _startCharterStreams() {
+    final familyId = _currentFamily?.familyId ?? '';
+    _charterSub = _charterService.watchFamilyCharter(familyId).listen((charter) {
+      if (!mounted) return;
+      setState(() {
+        _familyCharter = charter;
+        _charterLoading = false;
+      });
+      // When the charter doc changes, re-subscribe to its clauses.
+      _clausesSub?.cancel();
+      if (charter != null) {
+        _clausesSub = _charterService.watchClauses(charter.id).listen((clauses) {
+          if (mounted) setState(() => _charterClauses = clauses);
+        });
+      } else {
+        if (mounted) setState(() => _charterClauses = []);
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -278,11 +383,16 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           });
         } else {
-          final family = await _familyService.getFamilyById(user.familyId!);
-          if (family != null) {
-            setState(() {
-              _currentFamily = family;
-            });
+          if (user.familyId != null && user.familyId!.isNotEmpty) {
+            final family = await _familyService.getFamilyById(user.familyId!);
+            if (family != null) {
+              setState(() {
+                _currentFamily = family;
+              });
+              // Now that family is loaded, start charter streams.
+              _startCharterStreams();
+              _startFamilyMembersStream();
+            }
           }
         }
       }
@@ -323,73 +433,24 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _saveLessonAnswers(int week, String ans1, String ans2) async {
-    final uid = _currentUser?.uid;
-    if (uid != null) {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('lessonAnswers')
-          .doc('week_$week')
-          .set({
-            'week': week,
-            'answer1': ans1,
-            'answer2': ans2,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
-      final currentWeek = _currentUser?.currentWeek ?? 1;
-      if (week == currentWeek) {
-        await _updateCurrentWeek(currentWeek + 1);
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Answers saved and progress updated!'),
-            backgroundColor: AppTheme.successGreen,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _loadLessonAnswers(int week) async {
-    final uid = _currentUser?.uid;
-    if (uid != null) {
-      try {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('lessonAnswers')
-            .doc('week_$week')
-            .get();
-        if (doc.exists && doc.data() != null) {
-          final data = doc.data()!;
-          _lessonInput1Controller.text = data['answer1'] ?? '';
-          _lessonInput2Controller.text = data['answer2'] ?? '';
-        } else {
-          _lessonInput1Controller.clear();
-          _lessonInput2Controller.clear();
-        }
-      } catch (e) {
-        _lessonInput1Controller.clear();
-        _lessonInput2Controller.clear();
-      }
-    }
-  }
 
   void _navigateToSubPage(
     String subPage, [
     Map<String, dynamic>? params,
-  ]) async {
+  ]) {
     if (subPage == 'lesson') {
-      final int w = params?['week'] ?? 1;
-      await _loadLessonAnswers(w);
+      _loadLessonContent(params);
     } else if (subPage == 'game_matching') {
+      final game = params?['game'] as GameModel?;
+      if (game != null) _startGameContentStreams(game.id, game.type);
       _initMatchingGame();
     } else if (subPage == 'game_trivia') {
+      final game = params?['game'] as GameModel?;
+      if (game != null) _startGameContentStreams(game.id, game.type);
       _resetTrivia();
+    } else if (subPage == 'game_conversations') {
+      final game = params?['game'] as GameModel?;
+      if (game != null) _startGameContentStreams(game.id, game.type);
     }
 
     setState(() {
@@ -398,10 +459,67 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  /// Starts the three lesson-scoped streams for [InsightCards], [ModuleContent],
+  /// and [UserResponses]. Old subscriptions are cancelled first.
+  void _loadLessonContent(Map<String, dynamic>? params) {
+    final moduleId = params?['moduleId'] as String? ?? '';
+    final uid = _currentUser?.uid ?? '';
+
+    _insightCardsSub?.cancel();
+    _moduleContentSub?.cancel();
+    _responsesSub?.cancel();
+
+    if (moduleId.isEmpty) return;
+
+    setState(() => _lessonContentLoading = true);
+
+    _insightCardsSub =
+        _moduleService.watchInsightCards(moduleId).listen((cards) {
+      if (mounted) setState(() => _activeInsightCards = cards);
+    });
+
+    bool contentFirstEmit = true;
+    _moduleContentSub =
+        _moduleService.watchModuleContent(moduleId).listen((items) {
+      if (mounted) {
+        setState(() {
+          _activeModuleContent = items;
+          // The service yields [] immediately as a placeholder before Firestore
+          // responds. Only clear the loading flag once real data has arrived
+          // (non-empty list OR after the first placeholder emit has passed).
+          if (items.isNotEmpty || !contentFirstEmit) {
+            _lessonContentLoading = false;
+          }
+          contentFirstEmit = false;
+        });
+      }
+    });
+
+    if (uid.isNotEmpty) {
+      _responsesSub =
+          _responseService.watchModuleResponses(uid, moduleId).listen((map) {
+        if (mounted) setState(() => _activeResponses = map);
+      });
+    }
+  }
+
   void _goBack() {
+    // Cancel lesson-scoped streams when leaving a lesson
+    _insightCardsSub?.cancel();
+    _moduleContentSub?.cancel();
+    _responsesSub?.cancel();
+    if (_lessonPageController.hasClients) {
+      _lessonPageController.jumpToPage(0);
+    }
     setState(() {
       _activeSubPage = null;
       _subPageParams = null;
+      _activeInsightCards = [];
+      _activeModuleContent = [];
+      _activeResponses = {};
+      _lessonContentLoading = false;
+      _lessonPageIndex = 0;
+      _assessmentAnswered = false;
     });
   }
 
@@ -431,189 +549,248 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // MATCHING VALUES GAME VIEW
+  Widget _buildMatchingGameView() {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Moves: $_matchingMoves',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.oceanBlue,
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _initMatchingGame,
+                icon: const Icon(Icons.replay, size: 16),
+                label: const Text('Reset'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: 12,
+              itemBuilder: (context, index) {
+                return GestureDetector(
+                  onTap: (_matchingIgnoreTaps || _matchingFlipped[index])
+                      ? null
+                      : () {
+                          if (_firstFlippedIndex == null) {
+                            setState(() {
+                              _matchingFlipped[index] = true;
+                              _firstFlippedIndex = index;
+                            });
+                          } else {
+                            setState(() {
+                              _matchingFlipped[index] = true;
+                              _matchingMoves++;
+                              _matchingIgnoreTaps = true;
+                            });
+                            // Check for match
+                            if (_matchingCards[_firstFlippedIndex!] ==
+                                _matchingCards[index]) {
+                              setState(() {
+                                _matchingMatched[_firstFlippedIndex!] = true;
+                                _matchingMatched[index] = true;
+                                _firstFlippedIndex = null;
+                                _matchingIgnoreTaps = false;
+                              });
+                            } else {
+                              // No match, flip back after a delay
+                              Future.delayed(const Duration(milliseconds: 800),
+                                  () {
+                                setState(() {
+                                  _matchingFlipped[_firstFlippedIndex!] = false;
+                                  _matchingFlipped[index] = false;
+                                  _firstFlippedIndex = null;
+                                  _matchingIgnoreTaps = false;
+                                });
+                              });
+                            }
+                          }
+                        },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _matchingFlipped[index]
+                          ? Colors.white
+                          : AppTheme.oceanBlue,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _matchingMatched[index]
+                            ? Colors.green.shade400
+                            : AppTheme.skyBlue,
+                        width: 2,
+                      ),
+                      boxShadow: AppTheme.modernShadow,
+                    ),
+                    child: Center(
+                      child: _matchingFlipped[index]
+                          ? Text(
+                              _matchingCards[index],
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.deepNavy,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.question_mark_rounded,
+                              color: Colors.white,
+                            ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.lightBeige,
-      body: _isLoadingData
-          ? const Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  AppTheme.primaryColor,
-                ),
-              ),
-            )
-          : _activeSubPage != null
-          ? _buildSubPage()
-          : (_selectedIndex == 0 ? _buildHomeTab() : _buildOtherTabs()),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: (index) {
-            setState(() {
-              _selectedIndex = index;
-              _activeSubPage = null; // reset subpage when changing tabs
-            });
-          },
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.white,
-          selectedItemColor: AppTheme.oceanBlue,
-          unselectedItemColor: Colors.grey.shade400,
-          selectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 11,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.normal,
-            fontSize: 10,
-          ),
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_rounded),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.menu_book_rounded),
-              label: 'Modules',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.stars_rounded),
-              label: 'Charter',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.sports_esports_rounded),
-              label: 'Games',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.payment_rounded),
-              label: 'Payment',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_rounded),
-              label: 'Profile',
-            ),
-          ],
-        ),
+      backgroundColor: const Color(0xFFFDFBFB), // Soft modern background
+      body: SafeArea(
+        child: _selectedIndex == 0 
+          ? _buildHomeTab()
+          : _buildOtherTabs(),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        currentIndex: _selectedIndex,
+        onTap: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.book), label: 'Modules'),
+          BottomNavigationBarItem(icon: Icon(Icons.bookmark), label: 'Charter'),
+          BottomNavigationBarItem(icon: Icon(Icons.payment), label: 'Payment'),
+          BottomNavigationBarItem(icon: Icon(Icons.sports_esports), label: 'Games'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        ],
       ),
     );
   }
 
   Widget _buildHomeTab() {
     final currentWeek = _currentUser?.currentWeek ?? 1;
-    final familyName = _currentFamily?.familyName ?? 'My Family';
-    final progressVal =
-        (_currentFamily?.overallCompletionPercentage ?? 0.0) / 100.0;
-
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Welcome Header
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        // Header
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: AppTheme.oceanBlue.withValues(alpha: 0.1),
-                    child: const Icon(
-                      Icons.family_restroom_rounded,
-                      color: AppTheme.oceanBlue,
-                      size: 28,
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      gradient: AppTheme.primaryOmbre,
+                      boxShadow: AppTheme.modernShadow,
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    child: const Icon(Icons.home, color: Colors.white),
                   ),
                   const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Welcome, $familyName!',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textDark,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _currentFamily?.familyName ?? 'The Family',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textDark,
+                          ),
                         ),
-                      ),
-                      Text(
-                        _currentUser?.role != null
-                            ? '${_currentUser!.role!.toUpperCase()} Profile'
-                            : 'Family Member Profile',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textLight,
-                          fontWeight: FontWeight.w500,
+                        Text(
+                          'Week $currentWeek of 8',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textLight,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-
-            // Progress Summary Dashboard Card
+            // Welcome Back Card
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Container(
                 decoration: BoxDecoration(
                   gradient: AppTheme.primaryOmbre,
-                  borderRadius: BorderRadius.circular(24),
                   boxShadow: AppTheme.modernShadow,
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Overall Completion',
-                      style: TextStyle(fontSize: 14, color: Colors.white70),
+                      'Welcome Back!',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Continue your family transformation journey',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white70,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        const Text(
+                          'Overall Progress',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white70,
+                          ),
+                        ),
                         Text(
-                          '${(progressVal * 100).toInt()}%',
+                          '${_currentFamily?.overallCompletionPercentage ?? 0}%',
                           style: const TextStyle(
-                            fontSize: 32,
+                            fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white24,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            'Week $currentWeek of 8',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
                       child: LinearProgressIndicator(
-                        value: progressVal,
+                        value: (_currentFamily?.overallCompletionPercentage ?? 0) / 100.0,
                         minHeight: 8,
                         backgroundColor: Colors.white24,
                         valueColor: const AlwaysStoppedAnimation(Colors.white),
@@ -623,165 +800,241 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 24),
 
-            // Active Module Card
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: const Text(
-                'Active Module',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textDark,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey.shade200),
-                  boxShadow: AppTheme.modernShadow,
-                ),
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppTheme.oceanBlue.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.menu_book_rounded,
-                            color: AppTheme.oceanBlue,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Week $currentWeek of 8',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.textLight,
-                                ),
-                              ),
-                              const Text(
-                                'Family Identity & Structure',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.textDark,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Define your family identity and establish clear leadership roles',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.textLight,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Topics Covered',
+            // Active Module Card — populated from live Firestore modules.
+            Builder(builder: (context) {
+              // Find the module for the current week from the live stream.
+              final activeModule = _modules.cast<ModuleModel?>().firstWhere(
+                (m) => m!.week == currentWeek,
+                orElse: () => null,
+              );
+              final moduleTitle = activeModule?.title ??
+                  lessonData[currentWeek]?['title'] ??
+                  'Week $currentWeek Module';
+              final moduleDesc = activeModule?.description ??
+                  lessonData[currentWeek]?['subtitle'] ??
+                  'Continue your family transformation journey.';
+              final moduleTags = activeModule?.tags ?? [];
+              final moduleId = activeModule?.id ?? '';
+              final totalWeeks = _modules.isEmpty ? 8 : _modules.length;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: const Text(
+                      'Active Module',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: AppTheme.textDark,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: weekTopics.take(3).map((topic) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: AppTheme.primaryColor,
-                              width: 1,
-                            ),
-                          ),
-                          child: Text(
-                            topic,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppTheme.primaryColor,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          _navigateToSubPage('lesson', {'week': currentWeek});
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: Text(
-                          'Continue Week $currentWeek →',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.grey.shade200),
+                        boxShadow: AppTheme.modernShadow,
                       ),
+                      padding: const EdgeInsets.all(20),
+                      child: _modulesLoading
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    AppTheme.primaryColor,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.oceanBlue
+                                            .withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Icon(
+                                        Icons.menu_book_rounded,
+                                        color: AppTheme.oceanBlue,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Week $currentWeek of $totalWeeks',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppTheme.textLight,
+                                            ),
+                                          ),
+                                          Text(
+                                            moduleTitle,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.textDark,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            moduleDesc,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppTheme.textLight,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (moduleTags.isNotEmpty) ...[
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    'Topics Covered',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.textDark,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: moduleTags.take(4).map((tag) {
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade50,
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                          border: Border.all(
+                                            color: AppTheme.primaryColor,
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          tag,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: AppTheme.primaryColor,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                                const SizedBox(height: 16),
+                                Builder(builder: (context) {
+                                  final isPaidHome = _currentUser?.isPaid == true;
+                                  final isModuleActive = activeModule?.active ?? false;
+                                  return SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () {
+                                        if (!isModuleActive) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('This module is not yet available.'),
+                                              backgroundColor: AppTheme.oceanBlue,
+                                            ),
+                                          );
+                                        } else if (!isPaidHome) {
+                                          _showPaymentAlert(context);
+                                        } else {
+                                          _navigateToSubPage('lesson', {
+                                            'week': currentWeek,
+                                            'moduleId': moduleId,
+                                            'module': activeModule,
+                                          });
+                                        }
+                                      },
+                                      icon: Icon(
+                                        !isModuleActive
+                                            ? Icons.lock_clock_rounded
+                                            : isPaidHome
+                                                ? Icons.play_arrow_rounded
+                                                : Icons.lock_rounded,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                      label: Text(
+                                        !isModuleActive
+                                            ? 'Module Coming Soon'
+                                            : isPaidHome
+                                                ? 'Continue Week $currentWeek →'
+                                                : 'Please Pay to Access',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: (!isModuleActive || !isPaidHome)
+                                            ? Colors.grey.shade400
+                                            : AppTheme.primaryColor,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 14),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
                     ),
-                  ],
-                ),
-              ),
-            ),
+                  ),
+                ],
+              );
+            }),
             const SizedBox(height: 20),
 
-            // Program summary roadmap
+            // Program Roadmap — populated from live Firestore modules.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade200),
-                  borderRadius: BorderRadius.circular(16),
                   color: Colors.white,
+                  boxShadow: AppTheme.modernShadow,
+                  border: Border.all(color: Colors.white),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '8-Week Program Roadmap',
-                      style: TextStyle(
+                    Text(
+                      _modules.isEmpty
+                          ? '8-Week Program Roadmap'
+                          : '${_modules.length}-Week Program Roadmap',
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: AppTheme.textDark,
@@ -789,69 +1042,195 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const Text(
                       'Your family transformation journey',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textLight),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textLight,
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: 4,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final weeks = [
-                          'Week 1: Family Identity & Structure',
-                          'Week 2: Love & Communication',
-                          'Week 3: Boundaries & Safety',
-                          'Week 4: Core Values & Traditions',
-                        ];
-                        final isActive = index == (currentWeek - 1);
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: isActive
-                                        ? AppTheme.primaryColor
-                                        : Colors.grey.shade300,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: isActive
-                                    ? Container(
-                                        decoration: const BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: AppTheme.primaryColor,
-                                        ),
-                                        margin: const EdgeInsets.all(4),
-                                      )
-                                    : null,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  weeks[index],
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isActive
-                                        ? AppTheme.textDark
-                                        : AppTheme.textLight,
-                                    fontWeight: isActive
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                              ),
-                            ],
+                    if (_modulesLoading)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              AppTheme.primaryColor,
+                            ),
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      )
+                    else if (_modules.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          'No modules available yet. Check back soon!',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade400,
+                          ),
+                        ),
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _modules.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 4),
+                        itemBuilder: (context, index) {
+                          final m = _modules[index];
+                          final isCompleted = m.week < currentWeek;
+                          final isCurrentWeek = m.week == currentWeek;
+                          final isPaid = _currentUser?.isPaid == true;
+                          final isModuleActive = m.active;
+                          
+                          Color dotColor = Colors.grey.shade300;
+                          if (isCompleted) dotColor = AppTheme.successGreen;
+                          if (isCurrentWeek) dotColor = AppTheme.primaryColor;
+                          // When not paid or not active, use grey for all dots
+                          if (!isPaid || !isModuleActive) dotColor = Colors.grey.shade300;
+
+                          return GestureDetector(
+                            onTap: () {
+                              if (!isModuleActive) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('This module is not yet available.'),
+                                    backgroundColor: AppTheme.oceanBlue,
+                                  ),
+                                );
+                              } else if (!isPaid) {
+                                _showPaymentAlert(context);
+                              } else if (m.week > currentWeek) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Complete your current week first to unlock this lesson.'),
+                                    backgroundColor: AppTheme.oceanBlue,
+                                  ),
+                                );
+                              } else {
+                                _navigateToSubPage('lesson', {
+                                  'moduleId': m.id,
+                                  'week': m.week,
+                                  'module': m,
+                                });
+                              }
+                            },
+                            child: Container(
+                              color: Colors.transparent, // Ensures tap targets the whole row
+                              padding: const EdgeInsets.symmetric(vertical: 8.0),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: isCompleted
+                                          ? AppTheme.successGreen
+                                          : Colors.transparent,
+                                      border: Border.all(
+                                        color: dotColor,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: isCompleted
+                                        ? const Icon(
+                                            Icons.check,
+                                            size: 13,
+                                            color: Colors.white,
+                                          )
+                                        : isCurrentWeek && isModuleActive
+                                            ? Container(
+                                                decoration: const BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: AppTheme.primaryColor,
+                                                ),
+                                                margin: const EdgeInsets.all(4),
+                                              )
+                                            : (!isPaid || !isModuleActive
+                                                ? const Icon(
+                                                    Icons.lock_rounded,
+                                                    size: 14,
+                                                    color: Colors.grey,
+                                                  )
+                                                : null),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Week ${m.week}: ${m.title}',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: isPaid && isModuleActive && (isCurrentWeek || isCompleted)
+                                                ? AppTheme.textDark
+                                                : Colors.grey.shade400,
+                                            fontWeight: isCurrentWeek && isModuleActive && isPaid
+                                                ? FontWeight.w600
+                                                : FontWeight.w500,
+                                          ),
+                                        ),
+                                        if (m.description.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 2),
+                                            child: Text(
+                                              m.description,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey.shade500,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (isCompleted)
+                                    const Text(
+                                      'Done',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.successGreen,
+                                      ),
+                                    )
+                                  else if (isCurrentWeek && isModuleActive)
+                                    const Text(
+                                      'Current',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                    )
+                                  else if (!isPaid || !isModuleActive)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: Colors.grey.shade300),
+                                      ),
+                                      child: const Text(
+                                        'Locked',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                   ],
                 ),
               ),
@@ -859,7 +1238,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 30),
           ],
         ),
-      ),
+      ],
     );
   }
 
@@ -870,13 +1249,13 @@ class _HomeScreenState extends State<HomeScreen> {
       case 2:
         return _buildCharterTab();
       case 3:
-        return _buildGamesTab();
-      case 4:
         return _buildPaymentTab();
+      case 4:
+        return _buildGamesTab();
       case 5:
         return _buildProfileTab();
       default:
-        return const Center(child: Text('Page not found'));
+        return const Center(child: Text('Unknown Tab'));
     }
   }
 
@@ -884,50 +1263,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final currentWeek = _currentUser?.currentWeek ?? 1;
     final totalCompleted = (_currentUser?.currentWeek ?? 1) - 1;
     final progressVal = totalCompleted / 8.0;
+    final isPaid = _currentUser?.isPaid == true;
 
-    final List<Map<String, String>> weeksInfo = [
-      {
-        'week': 'Week 1',
-        'title': 'Family Identity & Structure',
-        'desc':
-            'Define your family identity and establish clear leadership roles',
-      },
-      {
-        'week': 'Week 2',
-        'title': 'Love & Communication',
-        'desc': 'Build healthy communication patterns and emotional connection',
-      },
-      {
-        'week': 'Week 3',
-        'title': 'Boundaries & Safety',
-        'desc': 'Create emotional and physical safety through clear boundaries',
-      },
-      {
-        'week': 'Week 4',
-        'title': 'Core Values & Traditions',
-        'desc': 'Identify core values and build lasting family traditions',
-      },
-      {
-        'week': 'Week 5',
-        'title': 'Roles of Father',
-        'desc': 'Understand and embrace the father\'s unique contribution',
-      },
-      {
-        'week': 'Week 6',
-        'title': 'Roles of Mother',
-        'desc': 'Understand and embrace the mother\'s unique contribution',
-      },
-      {
-        'week': 'Week 7',
-        'title': 'Roles of Children',
-        'desc': 'Foster responsibility, obedience, and character in children',
-      },
-      {
-        'week': 'Week 8',
-        'title': 'Family Governance',
-        'desc': 'Implement family meetings, financial stewardships, and rules',
-      },
-    ];
+    // Use live Firestore modules when available; show loading indicator while
+    // streaming. If Firestore has no data yet the list is empty.
+    final displayModules = _modules;
+    final moduleCount = displayModules.isEmpty ? 8 : displayModules.length;
 
     return Scaffold(
       backgroundColor: AppTheme.lightBeige,
@@ -956,16 +1297,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          '8-Week Program',
-                          style: TextStyle(
+                        Text(
+                          '$moduleCount-Week Program',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
                         Text(
-                          '$totalCompleted/8 Completed',
+                          isPaid
+                              ? '$totalCompleted/$moduleCount Completed'
+                              : 'Content Locked',
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -983,7 +1326,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
                       child: LinearProgressIndicator(
-                        value: progressVal,
+                      value: isPaid ? progressVal : 0.0,
                         minHeight: 8,
                         backgroundColor: Colors.white24,
                         valueColor: const AlwaysStoppedAnimation(Colors.white),
@@ -992,6 +1335,57 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
+              // Non-premium upgrade banner
+              if (!isPaid) ...[
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => setState(() => _selectedIndex = 3),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFF59E0B).withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(
+                          Icons.workspace_premium_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Upgrade to Premium to access all lessons',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 14,
+                          color: Colors.white70,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               const Text(
                 'Weekly Lessons',
@@ -1002,117 +1396,252 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: weeksInfo.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final item = weeksInfo[index];
-                  final isUnlocked = index < currentWeek;
-                  final isActive = index == (currentWeek - 1);
-
-                  return GestureDetector(
-                    onTap: isUnlocked
-                        ? () {
-                            _navigateToSubPage('lesson', {'week': index + 1});
-                          }
-                        : null,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isUnlocked ? Colors.white : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isActive
-                              ? AppTheme.oceanBlue
-                              : Colors.grey.shade200,
-                          width: isActive ? 2 : 1,
-                        ),
-                        boxShadow: isUnlocked ? AppTheme.modernShadow : null,
-                      ),
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: isUnlocked
-                                  ? (isActive
-                                        ? AppTheme.oceanBlue.withValues(
-                                            alpha: 0.1,
-                                          )
-                                        : AppTheme.lightBeige)
-                                  : Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              isUnlocked
-                                  ? Icons.menu_book_rounded
-                                  : Icons.lock_outline,
-                              color: isUnlocked
-                                  ? (isActive
-                                        ? AppTheme.oceanBlue
-                                        : AppTheme.textLight)
-                                  : Colors.grey.shade400,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${item['week']} of 8',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isUnlocked
-                                        ? AppTheme.textLight
-                                        : Colors.grey.shade500,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  item['title']!,
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: isUnlocked
-                                        ? AppTheme.textDark
-                                        : Colors.grey.shade600,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  isUnlocked
-                                      ? item['desc']!
-                                      : 'Complete previous weeks to unlock',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isUnlocked
-                                        ? AppTheme.textLight.withValues(
-                                            alpha: 0.8,
-                                          )
-                                        : Colors.grey.shade400,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (isUnlocked)
-                            const Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 16,
-                              color: AppTheme.textLight,
-                            ),
-                        ],
+              if (_modulesLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32),
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppTheme.primaryColor,
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: displayModules.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final module = displayModules[index];
+                    final isModuleActive = module.active;
+                    // For premium users, weeks unlock progressively.
+                    // For free users, every week is visible but paywall-gated.
+                    final isWeekReached = module.week <= currentWeek;
+                    final isCurrentWeek = module.week == currentWeek;
+                    // A lesson is fully accessible only when paid AND
+                    // the user has reached that week in the programme AND it is active.
+                    final isAccessible = isPaid && isWeekReached && isModuleActive;
+
+                    return GestureDetector(
+                      onTap: () {
+                        if (!isModuleActive) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'This module is not yet available.'),
+                              backgroundColor: AppTheme.oceanBlue,
+                            ),
+                          );
+                        } else if (!isPaid) {
+                          // Show payment alert dialog
+                          _showPaymentAlert(context);
+                        } else if (!isWeekReached) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'Complete your current week first to unlock this lesson.'),
+                              backgroundColor: AppTheme.oceanBlue,
+                            ),
+                          );
+                        } else {
+                          _navigateToSubPage('lesson', {
+                            'moduleId': module.id,
+                            'week': module.week,
+                            'module': module,
+                          });
+                        }
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isModuleActive ? Colors.white : Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isCurrentWeek && isPaid && isModuleActive
+                                ? AppTheme.oceanBlue
+                                : Colors.grey.shade200,
+                            width: isCurrentWeek && isPaid && isModuleActive ? 2 : 1,
+                          ),
+                          boxShadow: isModuleActive ? AppTheme.modernShadow : null,
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            // ── Leading icon ───────────────────────────────
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: isAccessible
+                                    ? (isCurrentWeek
+                                          ? AppTheme.oceanBlue
+                                                .withOpacity(0.1)
+                                          : AppTheme.lightBeige)
+                                    : Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                isAccessible
+                                    ? Icons.menu_book_rounded
+                                    : Icons.lock_outline_rounded,
+                                color: isAccessible
+                                    ? (isCurrentWeek
+                                          ? AppTheme.oceanBlue
+                                          : AppTheme.textLight)
+                                    : Colors.grey.shade400,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+
+                            // ── Text content ───────────────────────────────
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Week ${module.week}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isModuleActive ? AppTheme.textLight : Colors.grey.shade400,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    module.title,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: isModuleActive ? AppTheme.textDark : Colors.grey.shade500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    // Always show the real description so
+                                    // users know what they're buying into.
+                                    module.description,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isModuleActive ? AppTheme.textLight
+                                          .withOpacity(0.85) : Colors.grey.shade400,
+                                    ),
+                                  ),
+                                  if (module.tags.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Wrap(
+                                      spacing: 6,
+                                      children: module.tags
+                                          .take(3)
+                                          .map(
+                                            (tag) => Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: isModuleActive ? AppTheme.oceanBlue
+                                                    .withOpacity(0.08) : Colors.grey.shade200,
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
+                                              ),
+                                              child: Text(
+                                                tag,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: isModuleActive ? AppTheme.oceanBlue : Colors.grey.shade500,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            if (!isModuleActive)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: const Text(
+                                  'Soon',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              )
+                            else if (!isPaid)
+                              // Payment required badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.lock_rounded,
+                                      size: 11,
+                                      color: Colors.grey,
+                                    ),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'Locked',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Icon(
+                                    isWeekReached
+                                        ? Icons.arrow_forward_ios_rounded
+                                        : Icons.lock_outline_rounded,
+                                    size: 16,
+                                    color: AppTheme.textLight,
+                                  ),
+                                  if (module.totalModuleXp > 0)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        '${module.totalModuleXp} XP',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.amber.shade700,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               const SizedBox(height: 20),
             ],
           ),
@@ -1121,43 +1650,97 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Shows an alert dialog when an unpaid user taps locked content.
+  void _showPaymentAlert(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.lock_rounded,
+                color: AppTheme.primaryColor,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Payment Required',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textDark,
+              ),
+            ),
+          ],
+        ),
+        content: const Padding(
+          padding: EdgeInsets.only(top: 8, bottom: 20),
+          child: Text(
+            'Please complete payment to access this content. Unlock all 8 weekly lessons, worksheets, and your family charter.',
+            style: TextStyle(
+              fontSize: 14,
+              color: AppTheme.textLight,
+              height: 1.5,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: Colors.grey.shade500,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() => _selectedIndex = 3); // Go to Payment tab
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            ),
+            child: const Text(
+              'Pay Now',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCharterTab() {
     final readinessVal = (_currentFamily?.charterReadinessScore ?? 0.0) / 100.0;
+    final charterTitle =
+        _familyCharter?.title ?? 'Family Charter';
+    final charterPreamble =
+        _familyCharter?.preamble ?? 'Your comprehensive family framework document';
 
-    final List<Map<String, String>> charterSections = [
-      {
-        'title': 'Family Vision Statement',
-        'desc': 'Defining the family\'s long-term visual destination.',
-      },
-      {
-        'title': 'Family Mission & Values',
-        'desc': 'Core commitments and fundamental pillars.',
-      },
-      {
-        'title': 'Family Safety Agreement',
-        'desc': 'Establishing physical, mental and emotional protection.',
-      },
-      {
-        'title': 'Traditions & Celebrations',
-        'desc': 'Key milestones, events, and family bonding habits.',
-      },
-      {
-        'title': 'Father\'s Leadership Intent',
-        'desc': 'Pledges of leadership and active involvement.',
-      },
-      {
-        'title': 'Mother\'s Nurturing Vows',
-        'desc': 'Vows of support, parenting alignment, and love.',
-      },
-      {
-        'title': 'Children\'s Code of Honor',
-        'desc': 'Respect, chores, and behavioral standards.',
-      },
-      {
-        'title': 'Family Constitution',
-        'desc': 'Rules of governance and household agreements.',
-      },
-    ];
+    // Show live Firestore clauses when available, otherwise empty.
+    final displayClauses = _charterClauses;
+    final currentWeek = _currentUser?.currentWeek ?? 1;
 
     return Scaffold(
       backgroundColor: AppTheme.lightBeige,
@@ -1176,7 +1759,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  gradient: AppTheme.wavesOmbre,
+                  gradient: AppTheme.primaryOmbre,
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: AppTheme.modernShadow,
                 ),
@@ -1189,25 +1772,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       size: 64,
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'Family Charter',
-                      style: TextStyle(
+                    Text(
+                      charterTitle,
+                      style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Your comprehensive family framework document',
-                      style: TextStyle(fontSize: 13, color: Colors.white70),
+                    Text(
+                      charterPreamble,
+                      style: const TextStyle(
+                          fontSize: 13, color: Colors.white70),
                       textAlign: TextAlign.center,
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
-              // Progress Section Card (themed with periwinkle/blue waves style)
+              // Progress Section Card
               Container(
                 decoration: BoxDecoration(
                   color: const Color(0xFFF5F3FF),
@@ -1269,94 +1854,217 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Charter Sections',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textDark,
-                ),
+              Row(
+                children: [
+                  const Text(
+                    'Charter Clauses',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textDark,
+                    ),
+                  ),
+                  if (displayClauses.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEDE9FE),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${displayClauses.length}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF7C3AED),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 12),
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: charterSections.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final section = charterSections[index];
-                  final isUnlocked =
-                      index < ((_currentUser?.currentWeek ?? 1) - 1);
-
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: isUnlocked ? Colors.white : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isUnlocked
-                            ? Colors.grey.shade200
-                            : Colors.grey.shade200,
+              if (_charterLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32),
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF7C3AED),
                       ),
-                      boxShadow: isUnlocked ? AppTheme.modernShadow : null,
                     ),
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
+                  ),
+                )
+              else if (displayClauses.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Column(
                       children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: isUnlocked
-                                ? const Color(0xFFEDE9FE)
-                                : Colors.grey.shade200,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            isUnlocked
-                                ? Icons.verified_user_rounded
-                                : Icons.lock_outline,
-                            color: isUnlocked
-                                ? const Color(0xFF7C3AED)
-                                : Colors.grey.shade400,
-                            size: 20,
-                          ),
+                        Icon(
+                          Icons.article_outlined,
+                          size: 48,
+                          color: Colors.grey.shade300,
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                section['title']!,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: isUnlocked
-                                      ? AppTheme.textDark
-                                      : Colors.grey.shade600,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                isUnlocked
-                                    ? section['desc']!
-                                    : 'Unlock this section by completing Week ${index + 1}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isUnlocked
-                                      ? AppTheme.textLight
-                                      : Colors.grey.shade400,
-                                ),
-                              ),
-                            ],
+                        const SizedBox(height: 12),
+                        Text(
+                          'No clauses yet.\nComplete weekly modules to build your charter.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 14,
                           ),
                         ),
                       ],
                     ),
-                  );
-                },
-              ),
+                  ),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: displayClauses.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final clause = displayClauses[index];
+                    final isUnlocked = clause.weekReference < currentWeek;
+
+                    return Container(
+                      decoration: BoxDecoration(
+                        color:
+                            isUnlocked ? Colors.white : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.grey.shade200,
+                        ),
+                        boxShadow:
+                            isUnlocked ? AppTheme.modernShadow : null,
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: isUnlocked
+                                  ? const Color(0xFFEDE9FE)
+                                  : Colors.grey.shade200,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              isUnlocked
+                                  ? Icons.verified_user_rounded
+                                  : Icons.lock_outline,
+                              color: isUnlocked
+                                  ? const Color(0xFF7C3AED)
+                                  : Colors.grey.shade400,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: isUnlocked
+                                            ? const Color(0xFFEDE9FE)
+                                            : Colors.grey.shade200,
+                                        borderRadius:
+                                            BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        clause.category,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: isUnlocked
+                                              ? const Color(0xFF7C3AED)
+                                              : Colors.grey.shade500,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Week ${clause.weekReference}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  isUnlocked
+                                      ? clause.statement
+                                      : 'Unlock by completing Week ${clause.weekReference}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: isUnlocked
+                                        ? AppTheme.textDark
+                                        : Colors.grey.shade500,
+                                    fontStyle: isUnlocked
+                                        ? FontStyle.normal
+                                        : FontStyle.italic,
+                                  ),
+                                ),
+                                if (isUnlocked &&
+                                    clause.rationale.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    clause.rationale,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.textLight,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              // Closing commitment (shown only when charter exists and has clauses)
+              if (_familyCharter != null &&
+                  _familyCharter!.closingCommitment.isNotEmpty &&
+                  displayClauses.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F3FF),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFDDD6FE)),
+                  ),
+                  child: Text(
+                    _familyCharter!.closingCommitment,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF5B21B6),
+                      fontStyle: FontStyle.italic,
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
               const SizedBox(height: 20),
             ],
           ),
@@ -1388,15 +2096,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   boxShadow: AppTheme.modernShadow,
                 ),
                 padding: const EdgeInsets.all(20),
-                child: const Row(
+                child: Column(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.sports_esports_rounded,
                       color: Colors.white,
                       size: 40,
                     ),
-                    SizedBox(width: 16),
-                    Expanded(
+                    const SizedBox(width: 16),
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1432,34 +2140,64 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Game 1: Matching Game
-              _buildGameMenuCard(
-                title: 'Values Matching Game',
-                desc: 'A fun memory card matchup focusing on core values.',
-                icon: Icons.grid_view_rounded,
-                color: Colors.purple.shade400,
-                onTap: () => _navigateToSubPage('game_matching'),
-              ),
-              const SizedBox(height: 12),
-
-              // Game 2: Trivia
-              _buildGameMenuCard(
-                title: 'Family Wisdom Quiz',
-                desc: 'Multiple choice trivia about communication and values.',
-                icon: Icons.quiz_rounded,
-                color: Colors.teal.shade400,
-                onTap: () => _navigateToSubPage('game_trivia'),
-              ),
-              const SizedBox(height: 12),
-
-              // Game 3: Dinner Conversation cards
-              _buildGameMenuCard(
-                title: 'Conversation Starters',
-                desc: 'A deck of meaningful, fun prompts for the dinner table.',
-                icon: Icons.forum_rounded,
-                color: Colors.pink.shade400,
-                onTap: () => _navigateToSubPage('game_conversations'),
-              ),
+              // ── Dynamic game list from Firestore ─────────────────────────
+              // Add a new document to the `games` Firestore collection to
+              // show a new game card here — no code change needed.
+              if (_gamesLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppTheme.primaryColor,
+                      ),
+                    ),
+                  ),
+                )
+              else if (_gameCatalogue.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.sports_esports_outlined,
+                          size: 48,
+                          color: Colors.grey.shade300,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No games available right now.\nCheck back soon!',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ...List.generate(_gameCatalogue.length, (index) {
+                  final game = _gameCatalogue[index];
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index < _gameCatalogue.length - 1 ? 12 : 0,
+                    ),
+                    child: _buildGameMenuCard(
+                      title: game.title,
+                      desc: game.description,
+                      icon: iconFromString(game.iconName),
+                      color: game.color,
+                      xpReward: game.xpReward,
+                      onTap: () => _navigateToSubPage(
+                        'game_${game.type}',
+                        {'game': game},
+                      ),
+                    ),
+                  );
+                }),
             ],
           ),
         ),
@@ -1467,12 +2205,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+
   Widget _buildGameMenuCard({
     required String title,
     required String desc,
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
+    int xpReward = 0,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -1516,6 +2256,28 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: AppTheme.textLight,
                     ),
                   ),
+                  if (xpReward > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.star_rounded,
+                            size: 12,
+                            color: Colors.amber.shade600,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            '$xpReward XP',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1527,7 +2289,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPaymentTab() {
-    final isPremium = _currentUser?.subscriptionStatus == 'premium';
+    final isPaid = _currentUser?.isPaid == true;
 
     return Scaffold(
       backgroundColor: AppTheme.lightBeige,
@@ -1798,7 +2560,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 24),
 
-              if (isPremium) ...[
+              if (isPaid) ...[
                 // Premium unlocked view
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -2130,7 +2892,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   height: 54,
                   child: Container(
                     decoration: BoxDecoration(
-                      gradient: AppTheme.wavesOmbre,
+                      gradient: AppTheme.primaryOmbre,
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: AppTheme.modernShadow,
                     ),
@@ -2222,7 +2984,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      await _authService.updateSubscription('premium');
+      await _authService.updatePaymentStatus(true);
       await _loadData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2253,8 +3015,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildProfileTab() {
+    final isPaid = _currentUser?.isPaid == true;
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -2291,7 +3054,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.2),
+                                  color: Colors.white.withOpacity(0.2),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
@@ -2331,36 +3094,102 @@ class _HomeScreenState extends State<HomeScreen> {
               style: const TextStyle(fontSize: 14, color: AppTheme.textLight),
             ),
             const SizedBox(height: 30),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _buildProfileDetailRow(
-                    Icons.family_restroom,
-                    'Family',
-                    _currentFamily?.familyName ?? 'No Family connected',
+            Row(
+              children: [
+                Expanded(
+                  child: StatCard(
+                    icon: Icons.star_rounded,
+                    title: 'Total XP',
+                    value: '${_currentUser?.gamePoints ?? 0}',
+                    color: Colors.amber.shade600,
                   ),
-                  const Divider(height: 24),
-                  _buildProfileDetailRow(
-                    Icons.calendar_today,
-                    'Program Progression',
-                    'Week ${_currentUser?.currentWeek ?? 1} of 8',
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: StatCard(
+                    icon: Icons.track_changes_rounded,
+                    title: 'Progress',
+                    value: '${_currentUser?.completionPercentage ?? 0}%',
+                    color: AppTheme.oceanBlue,
                   ),
-                  const Divider(height: 24),
-                  _buildProfileDetailRow(
-                    Icons.workspace_premium,
-                    'Subscription',
-                    _currentUser?.subscriptionStatus?.toUpperCase() ?? 'TRIAL',
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: StatCard(
+                    icon: Icons.workspace_premium_rounded,
+                    title: 'Status',
+                    value: isPaid ? 'Premium' : 'Trial',
+                    color: isPaid ? AppTheme.successGreen : Colors.grey,
                   ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Family Members',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textDark,
+                ),
               ),
             ),
-            if (_currentUser?.subscriptionStatus == 'trial') ...[
+            const SizedBox(height: 16),
+            if (_familyMembers.isEmpty)
+              const Center(child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(),
+              ))
+            else
+              SizedBox(
+                height: 110,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _familyMembers.length,
+                  itemBuilder: (context, index) {
+                    final member = _familyMembers[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 20.0),
+                      child: Column(
+                        children: [
+                          CircleAvatar(
+                            radius: 32,
+                            backgroundColor: AppTheme.oceanBlue.withOpacity(0.1),
+                            child: Text(
+                              member.name.isNotEmpty ? member.name.substring(0, 1).toUpperCase() : '?',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.oceanBlue,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            member.name,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textDark,
+                            ),
+                          ),
+                          Text(
+                            member.role.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (!isPaid) ...[
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
@@ -2368,7 +3197,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     setState(() {
-                      _selectedIndex = 4; // Redirect to Payment Tab
+                      _selectedIndex = 3; // Redirect to Payment Tab
                     });
                   },
                   icon: const Icon(Icons.payment, color: Colors.white),
@@ -2389,7 +3218,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
-            const Spacer(),
+            const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
               height: 56,
@@ -2429,49 +3258,41 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildProfileDetailRow(IconData icon, String title, String value) {
-    return Row(
-      children: [
-        Icon(icon, color: AppTheme.primaryColor),
-        const SizedBox(width: 12),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textDark,
-          ),
-        ),
-        const Spacer(),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 14, color: AppTheme.textLight),
-        ),
-      ],
-    );
-  }
 
   // SUBPAGES RENDER (WITH BACK BUTTON)
   Widget _buildSubPage() {
     Widget child;
     String title = '';
+    PreferredSizeWidget? appBarBottom;
 
     switch (_activeSubPage) {
       case 'lesson':
         final int week = _subPageParams?['week'] ?? 1;
-        title = 'Week $week Lesson';
-        child = _buildLessonView(week);
+        final ModuleModel? module = _subPageParams?['module'] as ModuleModel?;
+        title = module != null ? module.title : 'Week $week Lesson';
+        child = _buildLessonView(week, module: module);
+        // Step indicator shown only for lesson
+        appBarBottom = PreferredSize(
+          preferredSize: const Size.fromHeight(28),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: PageIndicator(3, _lessonPageIndex),
+          ),
+        );
         break;
       case 'game_trivia':
-        title = 'Family Wisdom Quiz';
+        final GameModel? tGame = _subPageParams?['game'] as GameModel?;
+        title = tGame?.title ?? 'Family Wisdom Quiz';
         child = _buildTriviaGameView();
         break;
       case 'game_conversations':
-        title = 'Conversation Starters';
+        final GameModel? cGame = _subPageParams?['game'] as GameModel?;
+        title = cGame?.title ?? 'Conversation Starters';
         child = _buildConversationsGameView();
         break;
       case 'game_matching':
-        title = 'Values Matching Game';
+        final GameModel? mGame = _subPageParams?['game'] as GameModel?;
+        title = mGame?.title ?? 'Values Matching Game';
         child = _buildMatchingGameView();
         break;
       default:
@@ -2496,170 +3317,1234 @@ class _HomeScreenState extends State<HomeScreen> {
           onPressed: _goBack,
         ),
         elevation: 0,
+        bottom: appBarBottom,
       ),
-      body: child,
+      body: _isLoadingData
+          ? const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+              ),
+            )
+          : _activeSubPage != null
+              ? _buildSubPage()
+              : child,
     );
   }
 
-  // LESSON DETAIL VIEW WORKBOOK
-  Widget _buildLessonView(int week) {
-    final data =
-        lessonData[week] ??
-        {
-          'title': 'Weekly Lesson',
-          'subtitle': 'Workbook guidelines and reflection details.',
-          'readText': 'Workbook guidelines details.',
-          'question1': 'Question 1:',
-          'question2': 'Question 2:',
-        };
+  // ─────────────────────────────────────────────────────────────────────────
+  // LESSON DETAIL VIEW — 3-step PageView
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildLessonView(int week, {ModuleModel? module}) {
+    final reflections = _activeModuleContent.where((i) => i.type == 'reflection').toList();
+    final assessments = _activeModuleContent.where((i) => i.type == 'assessment').toList();
+    final activities  = _activeModuleContent.where((i) => i.type == 'activity').toList();
+
+    if (_lessonContentLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+        ),
+      );
+    }
+
+    return PageView(
+      controller: _lessonPageController,
+      physics: const ClampingScrollPhysics(),
+      children: [
+        _buildInsightsPage(week, module, reflections),
+        _buildAssessmentPage(assessments),
+        _buildActivitiesPage(activities, week),
+      ],
+    );
+  }
+
+  // ─── PAGE 1: Insights & Reflections ──────────────────────────────────────
+  Widget _buildInsightsPage(
+    int week,
+    ModuleModel? module,
+    List<ModuleContentModel> reflections,
+  ) {
+    final uid      = _currentUser?.uid ?? '';
+    final familyId = _currentUser?.familyId;
+    final subtitle = module?.description ??
+        lessonData[week]?['subtitle'] ??
+        'Workbook guidelines and reflection details.';
+    final totalXp  = _activeModuleContent.fold<int>(0, (acc, i) => acc + i.xpReward);
 
     return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── XP Banner ───────────────────────────────────────────────────────
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppTheme.deepNavy, AppTheme.oceanBlue],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: AppTheme.modernShadow,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.emoji_events_rounded, color: Colors.amber, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Max Week XP',
+                        style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w500)),
+                    Text('$totalXp Points',
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ],
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text('Week $week of 8',
+                      style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ── Module Description ───────────────────────────────────────────────
+          Text(
+            subtitle,
+            style: const TextStyle(
+              fontSize: 15,
+              fontStyle: FontStyle.italic,
+              height: 1.6,
+              color: AppTheme.textDark,
+              letterSpacing: 0.1,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ── Insight Cards ────────────────────────────────────────────────────
+          if (_activeInsightCards.isNotEmpty) ...[
+            const Text('This Week\'s Insights',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textDark)),
+            const SizedBox(height: 12),
+            if (_activeInsightCards.length >= 2)
+              Row(children: [
+                Expanded(child: _buildInsightCard(_activeInsightCards[0])),
+                const SizedBox(width: 12),
+                Expanded(child: _buildInsightCard(_activeInsightCards[1])),
+              ])
+            else
+              _buildInsightCard(_activeInsightCards[0]),
+            const SizedBox(height: 24),
+          ],
+
+          // ── Reflection Prompts ───────────────────────────────────────────────
+          if (reflections.isNotEmpty) ...[
+            const Text('Reflections',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textDark)),
+            const SizedBox(height: 12),
+            ...reflections.map((item) {
+              final existing = _activeResponses[item.id];
+              final ctrl     = TextEditingController(text: existing?.textResponse ?? '');
+              final isDone   = existing?.isCompleted ?? false;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDone ? AppTheme.oceanBlue.withValues(alpha: 0.3) : Colors.grey.shade200,
+                      width: isDone ? 1.5 : 1.0,
+                    ),
+                    boxShadow: AppTheme.modernShadow,
+                  ),
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(item.question,
+                                style: const TextStyle(
+                                    fontSize: 14, fontWeight: FontWeight.w600,
+                                    color: AppTheme.textDark, height: 1.4)),
+                          ),
+                          const SizedBox(width: 8),
+                          XpBadge('${item.xpReward} XP • Reflective Focus',
+                              const Color(0xFFDCEAFF), AppTheme.oceanBlue),
+                        ],
+                      ),
+                      if (item.description.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(item.description,
+                            style: const TextStyle(fontSize: 12, color: AppTheme.textLight, height: 1.4)),
+                      ],
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: ctrl,
+                        maxLines: 3,
+                        style: const TextStyle(fontSize: 14, height: 1.5),
+                        decoration: InputDecoration(
+                          hintText: 'Write your reflection here...',
+                          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                          filled: true,
+                          fillColor: const Color(0xFFF7FAFF),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade200),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade200),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppTheme.oceanBlue, width: 1.5),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          if (isDone) ...[
+                            const Icon(Icons.check_circle_rounded,
+                                color: AppTheme.successGreen, size: 16),
+                            const SizedBox(width: 4),
+                            Text('+${item.xpReward} XP earned',
+                                style: const TextStyle(fontSize: 12, color: AppTheme.successGreen,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                          const Spacer(),
+                          SizedBox(
+                            height: 38,
+                            child: ElevatedButton(
+                              onPressed: uid.isEmpty ? null : () async {
+                                final text = ctrl.text.trim();
+                                if (text.isEmpty) return;
+                                final isFirst = !isDone;
+                                final resp = UserResponseModel(
+                                  contentId: item.id,
+                                  moduleId: _subPageParams?['moduleId'] as String? ?? '',
+                                  type: item.type,
+                                  textResponse: text,
+                                  xpEarned: isFirst ? item.xpReward : (existing?.xpEarned ?? 0),
+                                );
+                                await _responseService.saveResponse(uid: uid, response: resp);
+                                if (isFirst) {
+                                  await _responseService.recordXp(uid: uid, familyId: familyId, xp: item.xpReward);
+                                }
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text(isFirst
+                                        ? 'Saved! +${item.xpReward} XP earned 🌟'
+                                        : 'Response updated.'),
+                                    backgroundColor: AppTheme.successGreen,
+                                  ));
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.oceanBlue,
+                                padding: const EdgeInsets.symmetric(horizontal: 18),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              child: Text(isDone ? 'Update' : 'Save',
+                                  style: const TextStyle(color: Colors.white, fontSize: 13)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+
+          // ── Empty state ────────────────────────────────────────────────────
+          if (_activeInsightCards.isEmpty && reflections.isEmpty)
+            EmptyContentState(),
+
+          const SizedBox(height: 16),
+
+          // ── Next Page CTA ────────────────────────────────────────────────────
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: () => _lessonPageController.nextPage(
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeInOut,
+              ),
+              icon: const Icon(Icons.arrow_forward_rounded, color: Colors.white),
+              label: const Text('Next: Assessment',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.oceanBlue,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  // ─── Insight Card Widget ────────────────────────────────────────────────────
+  Widget _buildInsightCard(InsightCardModel card) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppTheme.deepNavy, AppTheme.oceanBlue],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppTheme.modernShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(card.title,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+              maxLines: 2, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 8),
+          Text(card.body,
+              style: const TextStyle(fontSize: 11, color: Colors.white70, height: 1.4),
+              maxLines: 5, overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+
+  // ─── PAGE 2: Assessment ────────────────────────────────────────────────────
+  Widget _buildAssessmentPage(List<ModuleContentModel> assessments) {
+    final uid      = _currentUser?.uid ?? '';
+    final familyId = _currentUser?.familyId;
+
+    if (assessments.isEmpty) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(children: [
+          EmptyContentState(),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity, height: 52,
+            child: ElevatedButton.icon(
+              onPressed: () => _lessonPageController.nextPage(
+                  duration: const Duration(milliseconds: 350), curve: Curves.easeInOut),
+              icon: const Icon(Icons.arrow_forward_rounded, color: Colors.white),
+              label: const Text('Next: Activities',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.oceanBlue,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+            ),
+          ),
+        ]),
+      );
+    }
+
+    final item        = assessments.first;
+    final existing    = _activeResponses[item.id];
+    final alreadyDone = existing?.selectedOptionId != null;
+    String? selectedId = alreadyDone ? existing!.selectedOptionId : null;
+    bool submitted    = alreadyDone || _assessmentAnswered;
+
+    return StatefulBuilder(
+      builder: (context, localSetState) {
+        String feedbackMsg = '';
+        if (submitted && existing != null) {
+          feedbackMsg = (existing.isCorrect == true)
+              ? 'Excellent! You got it right! 🌟'
+              : 'Good effort! Review the insights and try again next time. 💪';
+        } else if (submitted) {
+          feedbackMsg = 'Answer recorded! Keep going 🌟';
+        }
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('Comprehension Check',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textDark)),
+                  ),
+                  XpBadge('${item.xpReward} XP • Comprehension Check',
+                      const Color(0xFFF3E8FF), const Color(0xFF7B3FA8)),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                  boxShadow: AppTheme.modernShadow,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.question,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
+                            color: AppTheme.textDark, height: 1.5)),
+                    const SizedBox(height: 20),
+                    ...item.options.map((opt) {
+                      final isSelected = selectedId == opt.optionId;
+                      Color bg     = Colors.white;
+                      Color border = Colors.grey.shade300;
+                      Color text   = AppTheme.textDark;
+
+                      if (submitted) {
+                        if (opt.isCorrect) {
+                          bg = const Color(0xFFE8F5E9);
+                          border = const Color(0xFF66BB6A);
+                          text = const Color(0xFF1B5E20);
+                        } else if (isSelected && !opt.isCorrect) {
+                          bg = const Color(0xFFFFEBEE);
+                          border = const Color(0xFFEF5350);
+                          text = const Color(0xFFB71C1C);
+                        }
+                      } else if (isSelected) {
+                        bg = const Color(0xFFDCEAFF);
+                        border = AppTheme.oceanBlue;
+                        text = AppTheme.deepNavy;
+                      }
+
+                      return GestureDetector(
+                        onTap: submitted ? null : () => localSetState(() => selectedId = opt.optionId),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOut,
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                          decoration: BoxDecoration(
+                            color: bg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: border, width: 1.5),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(child: Text(opt.optionText,
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: text))),
+                              if (submitted && opt.isCorrect)
+                                const Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32), size: 18)
+                              else if (submitted && isSelected && !opt.isCorrect)
+                                const Icon(Icons.cancel_rounded, color: Color(0xFFC62828), size: 18),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              if (!submitted && selectedId != null)
+                SizedBox(
+                  width: double.infinity, height: 52,
+                  child: ElevatedButton(
+                    onPressed: uid.isEmpty ? null : () async {
+                      final chosenOpt = item.options.firstWhere((o) => o.optionId == selectedId);
+                      final isFirst   = !alreadyDone;
+                      final resp = UserResponseModel(
+                        contentId: item.id,
+                        moduleId: _subPageParams?['moduleId'] as String? ?? '',
+                        type: item.type,
+                        selectedOptionId: selectedId,
+                        isCorrect: chosenOpt.isCorrect,
+                        xpEarned: isFirst ? item.xpReward : (existing?.xpEarned ?? 0),
+                      );
+                      await _responseService.saveResponse(uid: uid, response: resp);
+                      if (isFirst) {
+                        await _responseService.recordXp(uid: uid, familyId: familyId, xp: item.xpReward);
+                      }
+                      setState(() => _assessmentAnswered = true);
+                      localSetState(() => submitted = true);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7B3FA8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                    child: const Text('Submit Answer',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                  ),
+                ),
+
+              if (submitted && feedbackMsg.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3E8FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFCE93D8)),
+                  ),
+                  child: Text(feedbackMsg,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+                          color: Color(0xFF6A0080))),
+                ),
+              ],
+
+              if (submitted) ...[
+                const SizedBox(height: 20),
+                AnimatedOpacity(
+                  opacity: 1.0,
+                  duration: const Duration(milliseconds: 500),
+                  child: SizedBox(
+                    width: double.infinity, height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _lessonPageController.nextPage(
+                          duration: const Duration(milliseconds: 350), curve: Curves.easeInOut),
+                      icon: const Icon(Icons.arrow_forward_rounded, color: Colors.white),
+                      label: const Text('Next: Activities',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.oceanBlue,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 32),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ─── PAGE 3: Activities ────────────────────────────────────────────────────
+  Widget _buildActivitiesPage(List<ModuleContentModel> activities, int week) {
+    final uid        = _currentUser?.uid ?? '';
+    final familyId   = _currentUser?.familyId;
+    final controllers = {
+      for (final a in activities)
+        a.id: TextEditingController(text: _activeResponses[a.id]?.textResponse ?? '')
+    };
+
+    if (activities.isEmpty) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(children: [
+          EmptyContentState(),
+          const SizedBox(height: 24),
+          _buildCompleteWeekButton(week, [], {}, uid, familyId),
+        ]),
+      );
+    }
+
+    return StatefulBuilder(
+      builder: (context, localSetState) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Charter Building',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textDark)),
+              const SizedBox(height: 4),
+              const Text('Complete each activity to build your family charter.',
+                  style: TextStyle(fontSize: 13, color: AppTheme.textLight, height: 1.4)),
+              const SizedBox(height: 24),
+
+              ...activities.map((item) {
+                final existing = _activeResponses[item.id];
+                final isDone   = existing?.isCompleted ?? false;
+                final ctrl     = controllers[item.id]!;
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: isDone ? const Color(0xFF66BB6A) : Colors.grey.shade200,
+                          width: isDone ? 1.5 : 1.0),
+                      boxShadow: AppTheme.modernShadow,
+                    ),
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          XpBadge('${item.xpReward} XP • Charter Milestone',
+                              const Color(0xFFFFF8E1), const Color(0xFFE65100)),
+                          const Spacer(),
+                          if (isDone)
+                            Row(children: [
+                              const Icon(Icons.check_circle_rounded,
+                                  color: Color(0xFF2E7D32), size: 16),
+                              const SizedBox(width: 4),
+                              Text('+${item.xpReward} XP',
+                                  style: const TextStyle(fontSize: 12,
+                                      fontWeight: FontWeight.bold, color: Color(0xFF2E7D32))),
+                            ]),
+                        ]),
+                        const SizedBox(height: 14),
+                        Text(item.question,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
+                                color: AppTheme.textDark, height: 1.5)),
+                        if (item.description.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(item.description,
+                              style: const TextStyle(fontSize: 13, color: AppTheme.textLight, height: 1.5)),
+                        ],
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: ctrl,
+                          maxLines: 4,
+                          enabled: !isDone,
+                          style: const TextStyle(fontSize: 14, height: 1.6),
+                          decoration: InputDecoration(
+                            hintText: 'As a family, we commit to...',
+                            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                            filled: true,
+                            fillColor: isDone ? const Color(0xFFF1F8E9) : const Color(0xFFFFFBF2),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                  color: isDone ? const Color(0xFFA5D6A7) : Colors.amber.shade200),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                  color: isDone ? const Color(0xFFA5D6A7) : Colors.amber.shade200),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.amber.shade700, width: 1.5),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (!isDone)
+                          SizedBox(
+                            width: double.infinity, height: 44,
+                            child: ElevatedButton(
+                              onPressed: uid.isEmpty ? null : () async {
+                                final text = ctrl.text.trim();
+                                if (text.isEmpty) return;
+                                final resp = UserResponseModel(
+                                  contentId: item.id,
+                                  moduleId: _subPageParams?['moduleId'] as String? ?? '',
+                                  type: item.type,
+                                  textResponse: text,
+                                  xpEarned: item.xpReward,
+                                );
+                                await _responseService.saveResponse(uid: uid, response: resp);
+                                await _responseService.recordXp(uid: uid, familyId: familyId, xp: item.xpReward);
+                                localSetState(() {});
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.amber.shade700,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                              child: const Text('Save Activity',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+
+              const SizedBox(height: 8),
+              _buildCompleteWeekButton(week, activities, controllers, uid, familyId),
+              const SizedBox(height: 40),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCompleteWeekButton(
+    int week,
+    List<ModuleContentModel> activities,
+    Map<String, TextEditingController> controllers,
+    String uid,
+    String? familyId,
+  ) {
+    final currentWeek       = _currentUser?.currentWeek ?? 1;
+    final alreadyCompleted  = currentWeek > week;
+
+    return Container(
+      width: double.infinity,
+      height: 58,
+      decoration: BoxDecoration(
+        gradient: alreadyCompleted
+            ? const LinearGradient(colors: [Color(0xFF2E7D32), Color(0xFF388E3C)])
+            : const LinearGradient(colors: [AppTheme.deepNavy, AppTheme.oceanBlue]),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppTheme.modernShadow,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: (uid.isEmpty || alreadyCompleted) ? null : () async {
+            for (final act in activities) {
+              if (_activeResponses[act.id]?.isCompleted != true) {
+                final text = controllers[act.id]?.text.trim() ?? '';
+                if (text.isNotEmpty) {
+                  final resp = UserResponseModel(
+                    contentId: act.id,
+                    moduleId: _subPageParams?['moduleId'] as String? ?? '',
+                    type: act.type,
+                    textResponse: text,
+                    xpEarned: act.xpReward,
+                  );
+                  await _responseService.saveResponse(uid: uid, response: resp);
+                  await _responseService.recordXp(uid: uid, familyId: familyId, xp: act.xpReward);
+                }
+              }
+            }
+            final nextWeek = (week < 8) ? week + 1 : week;
+            await _updateCurrentWeek(nextWeek);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Week complete! Great work, family! 🎉'),
+                backgroundColor: Color(0xFF2E7D32),
+              ));
+              _goBack();
+            }
+          },
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  alreadyCompleted ? Icons.check_circle_rounded : Icons.auto_awesome_rounded,
+                  color: Colors.white, size: 22),
+                const SizedBox(width: 10),
+                Text(
+                  alreadyCompleted ? 'Week Already Completed ✓' : 'Save and Complete Week ✨',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Empty State Widget ────────────────────────────────────────────────────
+
+  // ─── XP Badge Widget ────────────────────────────────────────────────────────
+
+  // ─── Page Step Indicator ────────────────────────────────────────────────────
+
+  // ── Individual ModuleContent Item Renderer ────────────────────────────────
+  // ignore: unused_element
+  Widget _buildModuleContentItem(ModuleContentModel item) {
+    final existingResponse = _activeResponses[item.id];
+    final uid = _currentUser?.uid ?? '';
+    final familyId = _currentUser?.familyId;
+
+    switch (item.type) {
+      case 'reflection':
+        return _buildReflectionItem(item, existingResponse, uid, familyId);
+      case 'assessment':
+        return _buildAssessmentItem(item, existingResponse, uid, familyId);
+      case 'activity':
+        return _buildActivityItem(item, existingResponse, uid, familyId);
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildReflectionItem(
+    ModuleContentModel item,
+    UserResponseModel? existing,
+    String uid,
+    String? familyId,
+  ) {
+    final controller = TextEditingController(
+      text: existing?.textResponse ?? '',
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: AppTheme.modernShadow,
+        ),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Week subtitle & description
-            Text(
-              data['subtitle']!,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.oceanBlue,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
-                boxShadow: AppTheme.modernShadow,
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Study Reflection Guideline',
+            Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.oceanBlue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Reflection',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.textDark,
+                      color: AppTheme.oceanBlue,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    data['readText']!,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppTheme.textLight,
-                      height: 1.4,
-                    ),
+                ),
+                const Spacer(),
+                if (existing?.isCompleted ?? false)
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.star_rounded,
+                        size: 12,
+                        color: Colors.amber.shade600,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '+${item.xpReward} XP',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade700,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+              ],
             ),
-            const SizedBox(height: 24),
-
-            const Text(
-              'Interactive Worksheet',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textDark,
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Question 1
+            const SizedBox(height: 10),
             Text(
-              data['question1']!,
+              item.question,
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: AppTheme.textDark,
               ),
             ),
-            const SizedBox(height: 8),
+            if (item.description.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                item.description,
+                style: const TextStyle(
+                    fontSize: 12, color: AppTheme.textLight),
+              ),
+            ],
+            const SizedBox(height: 10),
             TextField(
-              controller: _lessonInput1Controller,
+              controller: controller,
               maxLines: 3,
               decoration: InputDecoration(
-                hintText: 'Type your reflection here...',
-                fillColor: Colors.white,
-                filled: true,
+                hintText: 'Write your reflection here...',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-
-            // Question 2
-            Text(
-              data['question2']!,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textDark,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _lessonInput2Controller,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: 'Type your reflection here...',
-                fillColor: Colors.white,
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Save Progress Button
+            const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  _saveLessonAnswers(
-                    week,
-                    _lessonInput1Controller.text,
-                    _lessonInput2Controller.text,
-                  );
-                },
-                icon: const Icon(
-                  Icons.check_circle_rounded,
-                  color: Colors.white,
-                ),
-                label: const Text(
-                  'Save & Complete Week',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+              child: ElevatedButton(
+                onPressed: uid.isEmpty
+                    ? null
+                    : () async {
+                        final text = controller.text.trim();
+                        if (text.isEmpty) return;
+                        final isFirstSubmit =
+                            !(existing?.isCompleted ?? false);
+                        final response = UserResponseModel(
+                          contentId: item.id,
+                          moduleId: _subPageParams?['moduleId'] as String? ?? '',
+                          type: item.type,
+                          textResponse: text,
+                          xpEarned: isFirstSubmit
+                              ? item.xpReward
+                              : (existing?.xpEarned ?? 0),
+                        );
+                        await _responseService.saveResponse(
+                          uid: uid,
+                          response: response,
+                        );
+                        if (isFirstSubmit) {
+                          await _responseService.recordXp(
+                            uid: uid,
+                            familyId: familyId,
+                            xp: item.xpReward,
+                          );
+                        }
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                isFirstSubmit
+                                    ? 'Saved! +${item.xpReward} XP earned 🌟'
+                                    : 'Response updated.'),
+                              backgroundColor: AppTheme.successGreen,
+                            ),
+                          );
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.oceanBlue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
+                child: Text(
+                  (existing?.isCompleted ?? false) ? 'Update' : 'Save Reflection',
+                  style: const TextStyle(color: Colors.white),
                 ),
               ),
             ),
-            const SizedBox(height: 30),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAssessmentItem(
+    ModuleContentModel item,
+    UserResponseModel? existing,
+    String uid,
+    String? familyId,
+  ) {
+    final alreadyAnswered = existing?.selectedOptionId != null;
+    return StatefulBuilder(
+      builder: (context, localSetState) {
+        String? selected =
+            alreadyAnswered ? existing!.selectedOptionId : null;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade200),
+              boxShadow: AppTheme.modernShadow,
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color:
+                            Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Assessment',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.purple.shade700,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    if (alreadyAnswered)
+                      Row(
+                        children: [
+                          Icon(
+                            existing!.isCorrect == true
+                                ? Icons.check_circle_rounded
+                                : Icons.cancel_rounded,
+                            size: 14,
+                            color: existing.isCorrect == true
+                                ? Colors.green
+                                : Colors.red,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${item.xpReward} XP',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  item.question,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textDark,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...item.options.map((opt) {
+                  final isSelected = selected == opt.optionId;
+                  Color bgColor = Colors.white;
+                  Color borderColor = Colors.grey.shade300;
+                  if (alreadyAnswered || selected != null) {
+                    if (opt.isCorrect) {
+                      bgColor = Colors.green.shade50;
+                      borderColor = Colors.green.shade400;
+                    } else if (isSelected && !opt.isCorrect) {
+                      bgColor = Colors.red.shade50;
+                      borderColor = Colors.red.shade400;
+                    }
+                  } else if (isSelected) {
+                    bgColor = AppTheme.oceanBlue.withValues(alpha: 0.08);
+                    borderColor = AppTheme.oceanBlue;
+                  }
+                  return GestureDetector(
+                    onTap: (alreadyAnswered || selected != null)
+                        ? null
+                        : () async {
+                            localSetState(() => selected = opt.optionId);
+                            final isFirstSubmit =
+                                !(existing?.isCompleted ?? false);
+                            final response = UserResponseModel(
+                              contentId: item.id,
+                              moduleId:
+                                  _subPageParams?['moduleId'] as String? ?? '',
+                              type: item.type,
+                              selectedOptionId: opt.optionId,
+                              isCorrect: opt.isCorrect,
+                              xpEarned: isFirstSubmit
+                                  ? item.xpReward
+                                  : (existing?.xpEarned ?? 0),
+                            );
+                            await _responseService.saveResponse(
+                                uid: uid, response: response);
+                            if (isFirstSubmit) {
+                              await _responseService.recordXp(
+                                uid: uid,
+                                familyId: familyId,
+                                xp: item.xpReward,
+                              );
+                            }
+                          },
+                    child: Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: bgColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: borderColor, width: 1.5),
+                      ),
+                      child: Text(
+                        opt.optionText,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textDark,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActivityItem(
+    ModuleContentModel item,
+    UserResponseModel? existing,
+    String uid,
+    String? familyId,
+  ) {
+    final isDone = existing?.isCompleted ?? false;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: isDone
+              ? LinearGradient(
+                  colors: [
+                    Colors.green.shade50,
+                    Colors.green.shade100,
+                  ],
+                )
+              : LinearGradient(
+                  colors: [
+                    Colors.amber.shade50,
+                    Colors.orange.shade50,
+                  ],
+                ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDone ? Colors.green.shade300 : Colors.amber.shade300,
+          ),
+          boxShadow: AppTheme.modernShadow,
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isDone
+                        ? Colors.green.shade100
+                        : Colors.amber.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Activity',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: isDone
+                          ? Colors.green.shade700
+                          : Colors.amber.shade800,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.star_rounded,
+                      size: 12,
+                      color: Colors.amber.shade600,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${item.xpReward} XP',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.amber.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              item.question,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDone
+                    ? Colors.green.shade800
+                    : AppTheme.textDark,
+              ),
+            ),
+            if (item.description.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                item.description,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDone
+                      ? Colors.green.shade600
+                      : AppTheme.textLight,
+                  height: 1.4,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: isDone || uid.isEmpty
+                    ? null
+                    : () async {
+                        final response = UserResponseModel(
+                          contentId: item.id,
+                          moduleId:
+                              _subPageParams?['moduleId'] as String? ?? '',
+                          type: item.type,
+                          textResponse: 'completed',
+                          xpEarned: item.xpReward,
+                        );
+                        await _responseService.saveResponse(
+                            uid: uid, response: response);
+                        await _responseService.recordXp(
+                          uid: uid,
+                          familyId: familyId,
+                          xp: item.xpReward,
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  'Activity completed! +${item.xpReward} XP 🎉'),
+                              backgroundColor: AppTheme.successGreen,
+                            ),
+                          );
+                        }
+                      },
+                icon: Icon(
+                  isDone
+                      ? Icons.check_circle_rounded
+                      : Icons.done_all_rounded,
+                  color: Colors.white,
+                ),
+                label: Text(
+                  isDone ? 'Completed ✓' : 'Mark as Complete',
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      isDone ? Colors.green.shade400 : Colors.amber.shade700,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -2744,7 +4629,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Padding(
       padding: const EdgeInsets.all(20.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2911,266 +4795,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Icon(
                     Icons.format_quote_rounded,
                     color: Colors.white70,
-                    size: 52,
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    _convoCards[_convoIndex],
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      height: 1.4,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 30),
-                  Text(
-                    'Card ${_convoIndex + 1} of ${_convoCards.length}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w500,
-                    ),
                   ),
                 ],
               ),
-            ),
-          ),
-          const SizedBox(height: 28),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      if (_convoIndex > 0) {
-                        _convoIndex--;
-                      } else {
-                        _convoIndex = _convoCards.length - 1;
-                      }
-                    });
-                  },
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  label: const Text('Previous'),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppTheme.oceanBlue),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      if (_convoIndex < _convoCards.length - 1) {
-                        _convoIndex++;
-                      } else {
-                        _convoIndex = 0;
-                      }
-                    });
-                  },
-                  icon: const Icon(
-                    Icons.arrow_forward_rounded,
-                    color: Colors.white,
-                  ),
-                  label: const Text(
-                    'Next Card',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextButton.icon(
-            onPressed: () {
-              setState(() {
-                _convoIndex = (List.from(
-                  _convoCards,
-                )..shuffle()).indexOf(_convoCards[_convoIndex]);
-                if (_convoIndex == -1 || _convoIndex >= _convoCards.length) {
-                  _convoIndex = 0;
-                }
-              });
-            },
-            icon: const Icon(Icons.shuffle_rounded),
-            label: const Text('Shuffle Prompts'),
-          ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  // MEMORY MATCHING GAME VIEW
-  Widget _buildMatchingGameView() {
-    final matchedAll = _matchingMatched.every((element) => element);
-
-    if (matchedAll && _matchingCards.isNotEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.star_rounded, color: Colors.amber, size: 84),
-              const SizedBox(height: 16),
-              const Text(
-                'Congratulations!',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textDark,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'You matched all core values in $_matchingMoves moves!',
-                style: const TextStyle(fontSize: 16, color: AppTheme.textLight),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton.icon(
-                onPressed: _initMatchingGame,
-                icon: const Icon(Icons.replay_rounded, color: Colors.white),
-                label: const Text(
-                  'Play Again',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Moves: $_matchingMoves',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textDark,
-                ),
-              ),
-              IconButton(
-                onPressed: _initMatchingGame,
-                icon: const Icon(
-                  Icons.replay_rounded,
-                  color: AppTheme.oceanBlue,
-                ),
-                tooltip: 'Restart Game',
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: GridView.builder(
-              itemCount: _matchingCards.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              itemBuilder: (context, idx) {
-                final isFlipped =
-                    _matchingFlipped[idx] || _matchingMatched[idx];
-                final value = _matchingCards[idx];
-
-                return GestureDetector(
-                  onTap: () {
-                    if (isFlipped || _matchingIgnoreTaps) return;
-
-                    setState(() {
-                      _matchingFlipped[idx] = true;
-                    });
-
-                    if (_firstFlippedIndex == null) {
-                      _firstFlippedIndex = idx;
-                    } else {
-                      final firstIdx = _firstFlippedIndex!;
-                      _matchingMoves++;
-
-                      if (_matchingCards[firstIdx] == _matchingCards[idx]) {
-                        // Match!
-                        setState(() {
-                          _matchingMatched[firstIdx] = true;
-                          _matchingMatched[idx] = true;
-                          _firstFlippedIndex = null;
-                        });
-                      } else {
-                        // Not a match, flip back after 1 second delay
-                        setState(() {
-                          _matchingIgnoreTaps = true;
-                        });
-                        Future.delayed(const Duration(milliseconds: 900), () {
-                          if (mounted) {
-                            setState(() {
-                              _matchingFlipped[firstIdx] = false;
-                              _matchingFlipped[idx] = false;
-                              _firstFlippedIndex = null;
-                              _matchingIgnoreTaps = false;
-                            });
-                          }
-                        });
-                      }
-                    }
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: isFlipped ? Colors.white : AppTheme.oceanBlue,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isFlipped ? AppTheme.oceanBlue : Colors.white,
-                        width: 2,
-                      ),
-                      boxShadow: AppTheme.modernShadow,
-                    ),
-                    child: isFlipped
-                        ? Text(
-                            value,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.textDark,
-                            ),
-                            textAlign: TextAlign.center,
-                          )
-                        : const Icon(
-                            Icons.question_mark_rounded,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                  ),
-                );
-              },
             ),
           ),
         ],

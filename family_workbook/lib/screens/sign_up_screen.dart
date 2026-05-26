@@ -5,6 +5,9 @@ import '../utils/country_data.dart';
 import '../services/auth_service.dart';
 import 'sign_in_screen.dart';
 import 'family_setup_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../utils/country_data.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -14,79 +17,99 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  final _authService = AuthService();
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+  final _authService = AuthService();
+  bool _isLoading = false;
+  bool _isPasswordVisible = false;
+  bool _isConfirmPasswordVisible = false;
+  Map<String, bool> _passwordRequirements = {};
+
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _phoneController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-  bool _isLoading = false;
   bool _isJoining = false;
   CountryData _selectedPhoneCountry = CountryData.fromCode('US');
-  Map<String, bool> _passwordRequirements = {
-    'length': false,
-    'uppercase': false,
-    'lowercase': false,
-    'number': false,
-    'symbol': false,
-  };
+  String? _selectedPersonalityType;
+
+  final List<String> _personalityTypes = [
+    'ISTJ', 'ISFJ', 'INFJ', 'INTJ',
+    'ISTP', 'ISFP', 'INFP', 'INTP',
+    'ESTP', 'ESFP', 'ENFP', 'ENTP',
+    'ESTJ', 'ESFJ', 'ENFJ', 'ENTJ',
+    'Other'
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordController.addListener(() {
+      final password = _passwordController.text;
+      setState(() {
+        _passwordRequirements = PasswordValidator.getRequirements(password);
+      });
+    });
+  }
 
   @override
   void dispose() {
-    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _usernameController.dispose();
     _phoneController.dispose();
     super.dispose();
   }
 
   void _handleSignUp() async {
     if (_formKey.currentState!.validate()) {
-      if (!PasswordValidator.isValid(_passwordController.text)) {
+      if (_passwordController.text != _confirmPasswordController.text) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Password does not meet all requirements'),
+            content: Text('Passwords do not match'),
             backgroundColor: AppTheme.errorRed,
           ),
         );
         return;
       }
+      if (_selectedPersonalityType == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select your personality type.')),
+        );
+        return;
+      }
 
-      setState(() {
-        _isLoading = true;
-      });
-
+      setState(() => _isLoading = true);
       try {
         // Step 1: Create user auth account and firestore document
         final user = await _authService.signUp(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
-          username: _nameController.text.trim(),
+          username: _usernameController.text.trim(),
+          phoneNumber: '${_selectedPhoneCountry.dialCode}${_phoneController.text}',
+          personalityType: _selectedPersonalityType,
         );
 
-        if (user != null) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Account created successfully! Let\'s set up your family.'),
-                backgroundColor: AppTheme.successGreen,
+        if (user != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Account created successfully! Let\'s set up your family.'),
+              backgroundColor: AppTheme.successGreen,
+            ),
+          );
+          // Navigate to FamilySetupScreen
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) => FamilySetupScreen(
+                isJoining: _isJoining,
+                user: user,
               ),
-            );
-            // Navigate to FamilySetupScreen
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(
-                builder: (context) => FamilySetupScreen(
-                  isJoining: _isJoining,
-                  user: user,
-                ),
-              ),
-              (route) => false,
-            );
-          }
+            ),
+            (route) => false,
+          );
         } else {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -212,7 +235,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -302,7 +324,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           _buildFormLabel('Full Name'),
                           const SizedBox(height: 8),
                           TextFormField(
-                            controller: _nameController,
+                            controller: _usernameController,
                             decoration: InputDecoration(
                               prefixIcon: Icon(
                                 Icons.person_outline,
@@ -755,6 +777,196 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPersonalityTestSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Personality Type',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textDark,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Please take the personality test and select your type below. This is a required step.',
+          style: TextStyle(fontSize: 14, color: AppTheme.textLight),
+        ),
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: () async {
+            final url = Uri.parse('https://personality.co/personality-test?gclid=CjwKCAjwn4vQBhBsEiwAq3hhN1aeXIzeAPdhygjVHyd26JPJFMTx_7jZNitu0k_zp1dnvHFRaf3pKxoCSp4QAvD_BwE&utm_source=google&utm_medium=cpc&utm_campaign=23296896410&utm_content=187856916654&utm_term=personality%20test&matchtype=e&device=c&gad_source=1&gad_campaignid=23296896410&gbraid=0AAAABCDT4dxvFttUTTi0xilc8jhWRG01l&gclid=CjwKCAjwn4vQBhBsEiwAq3hhN1aeXIzeAPdhygjVHyd26JPJFMTx_7jZNitu0k_zp1dnvHFRaf3pKxoCSp4QAvD_BwE');
+            if (await canLaunchUrl(url)) {
+              await launchUrl(url, mode: LaunchMode.externalApplication);
+            }
+          },
+          child: const Text(
+            'Take the Personality Test Here',
+            style: TextStyle(
+              fontSize: 14,
+              color: AppTheme.primaryColor,
+              decoration: TextDecoration.underline,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String>(
+          value: _selectedPersonalityType,
+          hint: const Text('Select Your Personality Type'),
+          isExpanded: true,
+          onChanged: (String? newValue) {
+            setState(() {
+              _selectedPersonalityType = newValue;
+            });
+          },
+          items: _personalityTypes.map<DropdownMenuItem<String>>((String value) {
+            return DropdownMenuItem<String>(
+              value: value,
+              child: Text(value),
+            );
+          }).toList(),
+          validator: (value) => value == null ? 'Please select a personality type' : null,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFamilyOptions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Family Options
+        Text(
+          'Choose Family Option',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isJoining = false;
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                  decoration: BoxDecoration(
+                    gradient: !_isJoining ? AppTheme.primaryOmbre : null,
+                    color: _isJoining ? Colors.white : null,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: !_isJoining 
+                          ? AppTheme.deepNavy 
+                          : AppTheme.softTan.withValues(alpha: 0.4),
+                      width: 2,
+                    ),
+                    boxShadow: !_isJoining ? AppTheme.modernShadow : null,
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.add_home_rounded,
+                        color: !_isJoining ? Colors.white : AppTheme.textLight,
+                        size: 32,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Start Family',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: !_isJoining ? Colors.white : AppTheme.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Create a new account for your home',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: !_isJoining 
+                              ? Colors.white.withValues(alpha: 0.9) 
+                              : AppTheme.textLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isJoining = true;
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                  decoration: BoxDecoration(
+                    gradient: _isJoining ? AppTheme.primaryOmbre : null,
+                    color: !_isJoining ? Colors.white : null,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: _isJoining 
+                          ? AppTheme.deepNavy 
+                          : AppTheme.softTan.withValues(alpha: 0.4),
+                      width: 2,
+                    ),
+                    boxShadow: _isJoining ? AppTheme.modernShadow : null,
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.group_add_rounded,
+                        color: _isJoining ? Colors.white : AppTheme.textLight,
+                        size: 32,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Join Family',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: _isJoining ? Colors.white : AppTheme.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Connect to an existing family space',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _isJoining 
+                              ? Colors.white.withValues(alpha: 0.9) 
+                              : AppTheme.textLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 32),
+      ],
     );
   }
 }
