@@ -3589,21 +3589,39 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final item        = assessments.first;
-    final existing    = _activeResponses[item.id];
-    final alreadyDone = existing?.selectedOptionId != null;
-    String? selectedId = alreadyDone ? existing!.selectedOptionId : null;
-    bool submitted    = alreadyDone || _assessmentAnswered;
+    Map<String, String> selectedOptions = {};
+    bool allAlreadyDone = true;
+    for (var item in assessments) {
+      final existing = _activeResponses[item.id];
+      if (existing?.selectedOptionId != null) {
+        selectedOptions[item.id] = existing!.selectedOptionId!;
+      } else {
+        allAlreadyDone = false;
+      }
+    }
+
+    bool submitted = allAlreadyDone || _assessmentAnswered;
 
     return StatefulBuilder(
       builder: (context, localSetState) {
         String feedbackMsg = '';
-        if (submitted && existing != null) {
-          feedbackMsg = (existing.isCorrect == true)
-              ? 'Excellent! You got it right! 🌟'
-              : 'Good effort! Review the insights and try again next time. 💪';
-        } else if (submitted) {
-          feedbackMsg = 'Answer recorded! Keep going 🌟';
+        if (submitted) {
+          int correctCount = 0;
+          for (var item in assessments) {
+            final sel = selectedOptions[item.id];
+            final existing = _activeResponses[item.id];
+            if (existing != null && existing.isCorrect == true) {
+               correctCount++;
+            } else if (sel != null) {
+               final chosenOpt = item.options.firstWhere((o) => o.optionId == sel, orElse: () => item.options.first);
+               if (chosenOpt.isCorrect) correctCount++;
+            }
+          }
+          if (correctCount == assessments.length) {
+            feedbackMsg = 'Excellent! You got everything right! 🌟';
+          } else {
+            feedbackMsg = 'Good effort! Review the insights and try again next time. 💪';
+          }
         }
 
         return SingleChildScrollView(
@@ -3617,114 +3635,135 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Text('Comprehension Check',
                         style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textDark)),
                   ),
-                  XpBadge('${item.xpReward} XP • Comprehension Check',
+                  XpBadge('${assessments.fold<int>(0, (total, i) => total + i.xpReward)} XP',
                       const Color(0xFFF3E8FF), const Color(0xFF7B3FA8)),
                 ],
               ),
               const SizedBox(height: 20),
 
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
-                  boxShadow: AppTheme.modernShadow,
-                ),
-                child: Column(
+              ...assessments.map((item) {
+                final selectedId = selectedOptions[item.id];
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(item.question,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
-                            color: AppTheme.textDark, height: 1.5)),
-                    const SizedBox(height: 20),
-                    ...item.options.map((opt) {
-                      final isSelected = selectedId == opt.optionId;
-                      Color bg     = Colors.white;
-                      Color border = Colors.grey.shade300;
-                      Color text   = AppTheme.textDark;
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade200),
+                        boxShadow: AppTheme.modernShadow,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.question,
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
+                                  color: AppTheme.textDark, height: 1.5)),
+                          const SizedBox(height: 20),
+                          ...item.options.map((opt) {
+                            final isSelected = selectedId == opt.optionId;
+                            Color bg     = Colors.white;
+                            Color border = Colors.grey.shade300;
+                            Color text   = AppTheme.textDark;
 
-                      if (submitted) {
-                        if (opt.isCorrect) {
-                          bg = const Color(0xFFE8F5E9);
-                          border = const Color(0xFF66BB6A);
-                          text = const Color(0xFF1B5E20);
-                        } else if (isSelected && !opt.isCorrect) {
-                          bg = const Color(0xFFFFEBEE);
-                          border = const Color(0xFFEF5350);
-                          text = const Color(0xFFB71C1C);
-                        }
-                      } else if (isSelected) {
-                        bg = const Color(0xFFDCEAFF);
-                        border = AppTheme.oceanBlue;
-                        text = AppTheme.deepNavy;
-                      }
+                            if (submitted) {
+                              if (opt.isCorrect) {
+                                bg = const Color(0xFFE8F5E9);
+                                border = const Color(0xFF66BB6A);
+                                text = const Color(0xFF1B5E20);
+                              } else if (isSelected && !opt.isCorrect) {
+                                bg = const Color(0xFFFFEBEE);
+                                border = const Color(0xFFEF5350);
+                                text = const Color(0xFFB71C1C);
+                              }
+                            } else if (isSelected) {
+                              bg = const Color(0xFFDCEAFF);
+                              border = AppTheme.oceanBlue;
+                              text = AppTheme.deepNavy;
+                            }
 
-                      return GestureDetector(
-                        onTap: submitted ? null : () => localSetState(() => selectedId = opt.optionId),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOut,
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-                          decoration: BoxDecoration(
-                            color: bg,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: border, width: 1.5),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(child: Text(opt.optionText,
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: text))),
-                              if (submitted && opt.isCorrect)
-                                const Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32), size: 18)
-                              else if (submitted && isSelected && !opt.isCorrect)
-                                const Icon(Icons.cancel_rounded, color: Color(0xFFC62828), size: 18),
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
+                            return GestureDetector(
+                              onTap: submitted ? null : () => localSetState(() => selectedOptions[item.id] = opt.optionId),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 220),
+                                curve: Curves.easeOut,
+                                width: double.infinity,
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                                decoration: BoxDecoration(
+                                  color: bg,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: border, width: 1.5),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(child: Text(opt.optionText,
+                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: text))),
+                                    if (submitted && opt.isCorrect)
+                                      const Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32), size: 18)
+                                    else if (submitted && isSelected && !opt.isCorrect)
+                                      const Icon(Icons.cancel_rounded, color: Color(0xFFC62828), size: 18),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                   ],
-                ),
-              ),
+                );
+              }),
 
-              const SizedBox(height: 16),
-
-              if (!submitted && selectedId != null)
+              if (!submitted)
                 SizedBox(
                   width: double.infinity, height: 52,
                   child: ElevatedButton(
-                    onPressed: uid.isEmpty ? null : () async {
-                      final chosenOpt = item.options.firstWhere((o) => o.optionId == selectedId);
-                      final isFirst   = !alreadyDone;
-                      final resp = UserResponseModel(
-                        contentId: item.id,
-                        moduleId: _subPageParams?['moduleId'] as String? ?? '',
-                        type: item.type,
-                        selectedOptionId: selectedId,
-                        isCorrect: chosenOpt.isCorrect,
-                        xpEarned: isFirst ? item.xpReward : (existing?.xpEarned ?? 0),
-                      );
-                      await _responseService.saveResponse(uid: uid, response: resp);
-                      if (isFirst) {
-                        await _responseService.recordXp(uid: uid, familyId: familyId, xp: item.xpReward);
+                    onPressed: (uid.isEmpty || selectedOptions.length < assessments.length) ? null : () async {
+                      List<UserResponseModel> responsesToSave = [];
+                      List<bool> isFirstList = [];
+                      
+                      for (var item in assessments) {
+                        final existing = _activeResponses[item.id];
+                        final isFirst = existing?.selectedOptionId == null;
+                        final selId = selectedOptions[item.id]!;
+                        final chosenOpt = item.options.firstWhere((o) => o.optionId == selId);
+                        
+                        final resp = UserResponseModel(
+                          contentId: item.id,
+                          moduleId: _subPageParams?['moduleId'] as String? ?? '',
+                          type: item.type,
+                          selectedOptionId: selId,
+                          isCorrect: chosenOpt.isCorrect,
+                          xpEarned: isFirst ? item.xpReward : (existing?.xpEarned ?? 0),
+                        );
+                        
+                        responsesToSave.add(resp);
+                        isFirstList.add(isFirst);
                       }
+                      
+                      await _responseService.saveResponsesBatch(
+                        uid: uid,
+                        responses: responsesToSave,
+                        isFirstSubmissions: isFirstList,
+                        familyId: familyId,
+                      );
+                      
                       setState(() => _assessmentAnswered = true);
                       localSetState(() => submitted = true);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF7B3FA8),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                    child: const Text('Submit Answer',
+                    child: const Text('Submit Answers',
                         style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                   ),
                 ),
 
               if (submitted && feedbackMsg.isNotEmpty) ...[
-                const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
@@ -3737,10 +3776,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
                           color: Color(0xFF6A0080))),
                 ),
+                const SizedBox(height: 20),
               ],
 
-              if (submitted) ...[
-                const SizedBox(height: 20),
+              if (submitted)
                 AnimatedOpacity(
                   opacity: 1.0,
                   duration: const Duration(milliseconds: 500),
@@ -3758,7 +3797,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-              ],
               const SizedBox(height: 32),
             ],
           ),

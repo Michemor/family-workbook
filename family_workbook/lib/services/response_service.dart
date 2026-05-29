@@ -87,6 +87,65 @@ class ResponseService {
     }
   }
 
+  /// Saves multiple responses in a single WriteBatch, and increments XP in the
+  /// same batch to minimize writes.
+  Future<void> saveResponsesBatch({
+    required String uid,
+    required List<UserResponseModel> responses,
+    required List<bool> isFirstSubmissions,
+    String? familyId,
+  }) async {
+    if (uid.isEmpty || responses.isEmpty) return;
+
+    final batch = _db.batch();
+    int totalXpToRecord = 0;
+
+    for (int i = 0; i < responses.length; i++) {
+      final response = responses[i];
+      final isFirst = isFirstSubmissions[i];
+      
+      final docRef = _db
+          .collection('users')
+          .doc(uid)
+          .collection('ModuleResponses')
+          .doc(response.moduleId)
+          .collection('Responses')
+          .doc(response.contentId);
+
+      final data = response.toMap();
+
+      if (isFirst) {
+        // First submission — set completedAt
+        data['completedAt'] = FieldValue.serverTimestamp();
+        batch.set(docRef, data);
+        totalXpToRecord += response.xpEarned;
+      } else {
+        // Subsequent edit — update response fields only
+        batch.update(docRef, data);
+      }
+    }
+
+    // Include XP increment in the same batch
+    if (totalXpToRecord > 0) {
+      batch.update(_db.collection('users').doc(uid), {
+        'xp_earned_total': FieldValue.increment(totalXpToRecord),
+      });
+
+      if (familyId != null && familyId.isNotEmpty) {
+        batch.update(_db.collection('families').doc(familyId), {
+          'xp_earned_total': FieldValue.increment(totalXpToRecord),
+        });
+      }
+    }
+
+    try {
+      await batch.commit();
+    } catch (e) {
+      debugPrint('[ResponseService] saveResponsesBatch error: $e');
+      rethrow;
+    }
+  }
+
   // ── XP Tracking ─────────────────────────────────────────────────────────────
 
   /// Increments XP totals on both the user and family documents.
